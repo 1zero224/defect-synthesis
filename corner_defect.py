@@ -78,22 +78,33 @@ def find_corner(image, quadrant="top_left, top_right, bottom_left, bottom_right"
 
     mask = np.zeros_like(binary_img)
     cv2.drawContours(mask, [max_contour], -1, (255), thickness=cv2.FILLED)
-    tile = cv2.bitwise_and(gray_img, gray_img, mask=mask)
-    orb = cv2.ORB_create(nfeatures=40)
-    keypoints, _ = orb.detectAndCompute(mask, None)
+    num_kp=40
+    while True:
+        orb = cv2.ORB_create(nfeatures=num_kp)
+        keypoints, _ = orb.detectAndCompute(mask, None)
 
-    height, width = gray_img.shape[:2]
-    quadrant_keypoints = [[], [], [], []]  # 初始化各区域关键点列表为空列表
-    for kp in keypoints:
-        x, y = kp.pt
-        if x < width / 2 and y < height / 2:
-            quadrant_keypoints[0].append(kp)  # 左上区域
-        elif x >= width / 2 and y < height / 2:
-            quadrant_keypoints[1].append(kp)  # 右上区域
-        elif x < width / 2 and y >= height / 2:
-            quadrant_keypoints[2].append(kp)  # 左下区域
+        height, width = gray_img.shape[:2]
+        quadrant_keypoints = [[], [], [], []]  # 初始化各区域关键点列表为空列表
+        for kp in keypoints:
+            x, y = kp.pt
+            if x < width / 2 and y < height / 2:
+                quadrant_keypoints[0].append(kp)  # 左上区域
+            elif x >= width / 2 and y < height / 2:
+                quadrant_keypoints[1].append(kp)  # 右上区域
+            elif x < width / 2 and y >= height / 2:
+                quadrant_keypoints[2].append(kp)  # 左下区域
+            else:
+                quadrant_keypoints[3].append(kp)  # 右下区域
+        
+        if quadrant=="top_left, top_right, bottom_left, bottom_right":
+            if quadrant_keypoints[0]!=[] and quadrant_keypoints[1]!=[] and quadrant_keypoints[2]!=[] and quadrant_keypoints[3]!=[]:
+                break
+            else:
+                num_kp+=50
+            if num_kp>500: 
+                assert False, "找不到四个角点"
         else:
-            quadrant_keypoints[3].append(kp)  # 右下区域
+            break
 
     corner_points, corner_point = [], []
     if "top_left" in quadrant:
@@ -133,17 +144,17 @@ def find_corner(image, quadrant="top_left, top_right, bottom_left, bottom_right"
     else: return corner_points
     
 
-def find_center_point_defrct2(base_img,defect_img,defect_quadrant,thresh_min,thresh_max):
+def find_center_point_defect2(base_img,defect_img,defect_quadrant,thresh_min,thresh_max):
     vertical_point,horizontal_point=find_missing_corner(defect_img,thresh_min,thresh_max)
     height, width = defect_img.shape[:2]
     if defect_quadrant=="top_left" :
-        quadrant_corner=[width,height,horizontal_point[1],-horizontal_point[1],-vertical_point[0],width//2,height//2]
+        quadrant_corner=[width,height,horizontal_point[1],-horizontal_point[1],-vertical_point[0],width/2,height/2]
     elif defect_quadrant=="top_right" :
-        quadrant_corner=[-width,height,horizontal_point[1],-horizontal_point[1],width-vertical_point[0],-width//2,height//2]
+        quadrant_corner=[-width,height,horizontal_point[1],-horizontal_point[1],width-vertical_point[0],-width/2,height/2]
     elif defect_quadrant=="bottom_left" :
-        quadrant_corner=[width,-height,-height+horizontal_point[1],height-horizontal_point[1],-vertical_point[0],width//2,-height//2]
+        quadrant_corner=[width,-height,-height+horizontal_point[1],height-horizontal_point[1],-vertical_point[0],width/2,-height/2]
     else:
-        quadrant_corner=[-width,-height,-height+horizontal_point[1],height-horizontal_point[1],width-vertical_point[0],-width//2,-height//2]
+        quadrant_corner=[-width,-height,-height+horizontal_point[1],height-horizontal_point[1],width-vertical_point[0],-width/2,-height/2]
 
     base_corner=find_corner(base_img, defect_quadrant)
     base_img_gray=cv2.cvtColor(base_img, cv2.COLOR_BGR2GRAY)
@@ -214,6 +225,7 @@ def find_bg(defect_img, base_img, center_point, defect_quadrant):
 def find_center_point_defect1(center_point, base_img, defect_img, defect_quadrant, thresh_min, thresh_max):
     base_img_gray=cv2.cvtColor(base_img, cv2.COLOR_BGR2GRAY)
     defect_img_gray=cv2.cvtColor(defect_img, cv2.COLOR_BGR2GRAY)
+    _, defect_img_gray=cv2.threshold(defect_img_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     edge=cv2.Canny(defect_img_gray, thresh_min, thresh_max)
 
     if defect_quadrant=="top" or defect_quadrant=="bottom" :
@@ -224,6 +236,7 @@ def find_center_point_defect1(center_point, base_img, defect_img, defect_quadran
                 break
 
         edge_img=base_img_gray[int(center_point[1]-defect_img.shape[0]//2):int(center_point[1]+defect_img.shape[0]//2),int(center_point[0]-defect_img.shape[1]//2):int(center_point[0]+defect_img.shape[1]//2)]
+        _, edge_img=cv2.threshold(edge_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         edge=cv2.Canny(edge_img, thresh_min, thresh_max)
         edge_p_base=defect_img.shape[0]//2
         for p in range(0,defect_img.shape[0]-1):
@@ -239,6 +252,7 @@ def find_center_point_defect1(center_point, base_img, defect_img, defect_quadran
                 break
         
         edge_img=base_img_gray[int(center_point[1]-defect_img.shape[0]//2):int(center_point[1]+defect_img.shape[0]//2),int(center_point[0]-defect_img.shape[1]//2):int(center_point[0]+defect_img.shape[1]//2)]
+        _, edge_img=cv2.threshold(edge_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         edge=cv2.Canny(edge_img, thresh_min, thresh_max)
         edge_p_base=defect_img.shape[1]//2
         for p in range(0,defect_img.shape[1]-1):
@@ -291,23 +305,19 @@ def defect1(base_img, base_img_name, defect_img, defect_img_data):
     if min(dis1) == dis1[0] or min(dis_mid) == dis_mid[0]:
         defect_quadrant="top"
         exra_x, exra_y = 30, 10
-        if dx1-exra_x<defect_img_corner[2][0]: exra_x=dx1
-        if dx2+exra_x>defect_img_corner[3][0]: exra_x=defect_img.shape[1]-dx2
+        exra_x = min(30,min(dx1-defect_img_corner[0][0],defect_img_corner[1][0]-dx2))
     elif min(dis1) == dis1[1] or min(dis_mid) == dis_mid[1]:
         defect_quadrant="bottom"
         exra_x, exra_y = 30, 10
-        if dx1-exra_x<defect_img_corner[0][0]: exra_x=dx1
-        if dx2+exra_x>defect_img_corner[1][0]: exra_x=defect_img.shape[1]-dx2
+        exra_x = min(30,min(dx1-defect_img_corner[2][0],defect_img_corner[3][0]-dx2))
     elif min(dis1) == dis1[2] or min(dis_mid) == dis_mid[2]:
         defect_quadrant="left"
         exra_x, exra_y = 10, 30
-        if dy1-exra_y<defect_img_corner[1][1]: exra_y=dy1
-        if dy2+exra_y>defect_img_corner[3][1]: exra_y=defect_img.shape[0]-dy2
+        exra_y = min(30,min(dy1-defect_img_corner[0][1],defect_img_corner[2][1]-dy2))
     else:
         defect_quadrant="right"
         exra_x, exra_y = 10, 30
-        if dy1-exra_y<defect_img_corner[0][1]: exra_y=dy1
-        if dy2+exra_y>defect_img_corner[2][1]: exra_y=defect_img.shape[0]-dy2
+        exra_y = min(30,min(dy1-defect_img_corner[1][1],defect_img_corner[3][1]-dy2))
     defect_img = defect_img[int(dy1-exra_y):int(dy2+exra_y), int(dx1-exra_x):int(dx2+exra_x)]
 
     if "_CAM1" in defect_img_data["name"]:
@@ -385,7 +395,7 @@ def defect2(base_img, base_img_name, defect_img, defect_img_data, thresh_defect=
         assert False, "图像名不符合规范！"
 
     #defect_quadrant = "bottom_right"
-    center_point = find_center_point_defrct2(base_img,defect_img,defect_quadrant,thresh_min,thresh_max)
+    center_point = find_center_point_defect2(base_img,defect_img,defect_quadrant,thresh_min,thresh_max)
     result = cv2.seamlessClone(defect_img, base_img, mask_all, center_point, cv2.NORMAL_CLONE)
 
     background = find_bg(defect_img, base_img, center_point, defect_quadrant)
@@ -420,7 +430,8 @@ def defect2(base_img, base_img_name, defect_img, defect_img_data, thresh_defect=
     mask_defect_bg = cv2.blur(mask_defect_bg, (3, 3))
     result = cv2.seamlessClone(background, result, mask_defect_bg, center_point, cv2.NORMAL_CLONE)
 
-    defect_img_ana = result[center_point[1]-defect_img.shape[0]//2:center_point[1]+defect_img.shape[0]//2,center_point[0]-defect_img.shape[1]//2:center_point[0]+defect_img.shape[1]//2]
+    defect_point = (center_point[0]-defect_img.shape[1]//2, center_point[1]-defect_img.shape[0]//2)
+    defect_img_ana = result[defect_point[1]:defect_point[1]+defect_img.shape[0], defect_point[0]:defect_point[0]+defect_img.shape[1]]
     _,mask_ana=cv2.threshold(defect_img_gray, thresh_max, 255, cv2.THRESH_BINARY_INV)
     kernel = np.ones((int((max(defect_img.shape[0],defect_img.shape[1])*0.05)),int((max(defect_img.shape[0],defect_img.shape[1])*0.05))), np.uint8)
     dilated_mask = cv2.dilate(mask_ana, kernel, iterations=1)
@@ -466,17 +477,20 @@ def defect3to6(base_img, base_img_name, defect_img, defect_img_data):
     mask_all = np.ones(defect_img.shape, dtype=np.uint8) * 255
     result = cv2.seamlessClone(defect_img, base_img, mask_all, center_point, cv2.NORMAL_CLONE)
 
-    defect_img_gray = cv2.cvtColor(defect_img, cv2.COLOR_BGR2GRAY)
-    _, defect_mask = cv2.threshold(defect_img_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    if defect_mask[0, 0] == 255 and defect_mask[0, defect_img.shape[1]-1] == 255 and defect_mask[defect_img.shape[0]-1, 0] == 255 and defect_mask[defect_img.shape[0]-1, defect_img.shape[1]-1] == 255: defect_mask=cv2.bitwise_not(defect_mask)
-    kernel = np.ones((int((max(defect_img.shape[0],defect_img.shape[1])*0.05)),int((max(defect_img.shape[0],defect_img.shape[1])*0.05))), np.uint8)
-    base_bg_mask = cv2.dilate(defect_mask, kernel, iterations=1)
-    base_bg_mask = cv2.bitwise_not(base_bg_mask)
-    base_bg_mask = cv2.blur(base_bg_mask, (2, 2))
-    base_bg = base_img[center_point[1]-defect_img.shape[0]//2:center_point[1]+defect_img.shape[0]//2, center_point[0]-defect_img.shape[1]//2:center_point[0]+defect_img.shape[1]//2]
-    result = cv2.seamlessClone(base_bg, result, base_bg_mask, center_point, cv2.NORMAL_CLONE)
+    if not "_CAM3" in defect_img_data["name"]: 
+        defect_img_gray = cv2.cvtColor(defect_img, cv2.COLOR_BGR2GRAY)
+        _, defect_mask = cv2.threshold(defect_img_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        if defect_mask[0, 0] == 255 and defect_mask[0, defect_img.shape[1]-1] == 255 and defect_mask[defect_img.shape[0]-1, 0] == 255 and defect_mask[defect_img.shape[0]-1, defect_img.shape[1]-1] == 255: defect_mask=cv2.bitwise_not(defect_mask)
+        kernel = np.ones((int((max(defect_img.shape[0],defect_img.shape[1])*0.05)),int((max(defect_img.shape[0],defect_img.shape[1])*0.05))), np.uint8)
+        base_bg_mask = cv2.dilate(defect_mask, kernel, iterations=1)
+        base_bg_mask = cv2.bitwise_not(base_bg_mask)
+        base_bg_mask = cv2.blur(base_bg_mask, (2, 2))
+        base_point = (int(center_point[0]-defect_img.shape[1]//2), int(center_point[1]-defect_img.shape[0]//2))
+        base_bg = base_img[base_point[1]:base_point[1]+defect_img.shape[0], base_point[0]:base_point[0]+defect_img.shape[1]]
+        result = cv2.seamlessClone(base_bg, result, base_bg_mask, center_point, cv2.NORMAL_CLONE)
 
-    defect_img_ana = result[center_point[1]-defect_img.shape[0]//2:center_point[1]+defect_img.shape[0]//2,center_point[0]-defect_img.shape[1]//2:center_point[0]+defect_img.shape[1]//2]
+    base_point = (int(center_point[0]-defect_img.shape[1]//2), int(center_point[1]-defect_img.shape[0]//2))
+    defect_img_ana = result[base_point[1]:base_point[1]+defect_img.shape[0], base_point[0]:base_point[0]+defect_img.shape[1]]
     result = cv2.seamlessClone(defect_img_ana, base_img, mask_all, center_point, cv2.NORMAL_CLONE)
 
     result_inf={
@@ -488,7 +502,7 @@ def defect3to6(base_img, base_img_name, defect_img, defect_img_data):
         "image_height": base_img.shape[0],
         "image_width": base_img.shape[1],
         "category": defect_img_data["category"],
-        "bbox": [center_point[0]-defect_img.shape[1]//2,center_point[1]-defect_img.shape[0]//2,center_point[0]+defect_img.shape[1]//2,center_point[1]+defect_img.shape[0]//2]
+        "bbox": [center_point[0]-defect_img.shape[1]//2,center_point[1]-defect_img.shape[0]//2,center_point[0]-defect_img.shape[1]//2+defect_img.shape[1],center_point[1]-defect_img.shape[0]//2+defect_img.shape[0]]
     }
 
     return result, result_inf
@@ -518,10 +532,11 @@ if __name__ == "__main__":
         base_img = cv2.imread(os.path.join(base_imgs_path, base_img_name))
         for defect_img_data in tqdm(img_data):
             defect_img_name = defect_img_data["name"]
-            defect_img = cv2.imread(os.path.join(defect_imgs_path, defect_img_name))
             gen_img = None
 
             if base_img_name[base_img_name.index("_CAM"):] == defect_img_name[defect_img_name.index("_CAM"):]:
+                defect_img = cv2.imread(os.path.join(defect_imgs_path, defect_img_name))
+
                 if defect_img_data["category"] == 1 :
                     gen_img, gen_img_inf=defect1(base_img, base_img_name, defect_img, defect_img_data)
                     
@@ -532,7 +547,7 @@ if __name__ == "__main__":
                     gen_img, gen_img_inf=defect3to6(base_img, base_img_name, defect_img, defect_img_data)
 
             if gen_img is not None:
-                cv2.rectangle(gen_img, (gen_img_inf["bbox"][0], gen_img_inf["bbox"][1]), (gen_img_inf["bbox"][2], gen_img_inf["bbox"][3]), (0, 0, 255), 1)
+                # cv2.rectangle(gen_img, (gen_img_inf["bbox"][0], gen_img_inf["bbox"][1]), (gen_img_inf["bbox"][2], gen_img_inf["bbox"][3]), (0, 0, 255), 1)
                 cv2.imwrite(os.path.join(output_folder, gen_img_inf["name"]), gen_img)
                 gen_img_data.append(gen_img_inf)
                 img_datai = img_data.copy()
@@ -541,6 +556,4 @@ if __name__ == "__main__":
                         item["name"] = gen_img_inf["name"]
                         gen_img_data.append(item)
                 with open("gen_train_annos.json", "w") as wnfile:
-                    json.dump(gen_img_data, wnfile, indent=4) 
-                
-            
+                    json.dump(gen_img_data, wnfile, indent=4)             
