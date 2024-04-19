@@ -645,45 +645,45 @@ def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, err
         defect_img_name = defect_img_data["name"]
         gen_img = None
 
-        # try:
+        try:
             # if base_img_name[base_img_name.index("_CAM"):] == defect_img_name[defect_img_name.index("_CAM"):]:
-        base_img = cv2.imread(os.path.join(base_imgs_path, base_img_name))
-        defect_img = cv2.imread(os.path.join(defect_imgs_path, defect_img_name))
-        if base_img is None: assert False, "底图不存在！"
-        if defect_img is None: assert False, "缺陷图像不存在！"
+            base_img = cv2.imread(os.path.join(base_imgs_path, base_img_name))
+            defect_img = cv2.imread(os.path.join(defect_imgs_path, defect_img_name))
+            if base_img is None: assert False, "底图不存在！"
+            if defect_img is None: assert False, "缺陷图像不存在！"
 
-        if defect_img_data["category"] == 1 :
-            gen_img, gen_img_inf=defect1(base_img, base_img_name, defect_img, defect_img_data)
-            
-        elif defect_img_data["category"] == 2 :
-            gen_img, gen_img_inf=defect2(base_img, base_img_name, defect_img, defect_img_data)
+            if defect_img_data["category"] == 1 :
+                gen_img, gen_img_inf=defect1(base_img, base_img_name, defect_img, defect_img_data)
+                
+            elif defect_img_data["category"] == 2 :
+                gen_img, gen_img_inf=defect2(base_img, base_img_name, defect_img, defect_img_data)
 
-        elif defect_img_data["category"] == 3 or defect_img_data["category"] == 4 or defect_img_data["category"] == 5 or defect_img_data["category"] == 6: 
-            gen_img, gen_img_inf=defect3to6(base_img, base_img_name, defect_img, defect_img_data)
-            # sub_gen_img = gen_img[int(gen_img_inf["bbox"][1]-50):int(gen_img_inf["bbox"][3]+50), int(gen_img_inf["bbox"][0]-50):int(gen_img_inf["bbox"][2]+50)]
-            # sub_img = defect_img[int(gen_img_inf["defect_bbox"][1]-50):int(gen_img_inf["defect_bbox"][3]+50), int(gen_img_inf["defect_bbox"][0]-50):int(gen_img_inf["defect_bbox"][2]+50)]
+            elif defect_img_data["category"] == 3 or defect_img_data["category"] == 4 or defect_img_data["category"] == 5 or defect_img_data["category"] == 6: 
+                gen_img, gen_img_inf=defect3to6(base_img, base_img_name, defect_img, defect_img_data)
+                # sub_gen_img = gen_img[int(gen_img_inf["bbox"][1]-50):int(gen_img_inf["bbox"][3]+50), int(gen_img_inf["bbox"][0]-50):int(gen_img_inf["bbox"][2]+50)]
+                # sub_img = defect_img[int(gen_img_inf["defect_bbox"][1]-50):int(gen_img_inf["defect_bbox"][3]+50), int(gen_img_inf["defect_bbox"][0]-50):int(gen_img_inf["defect_bbox"][2]+50)]
 
-        if gen_img is not None:
-            cv2.imwrite(os.path.join(output_folder, gen_img_inf["name"]), gen_img)
-            gen_img_data.append(gen_img_inf)
-            gen_img_data_with_ord.append(gen_img_inf)
-            img_datai = ord_data.copy()
-            for item in img_datai:
-                if item["name"] == base_img_name:
-                    item["name"] = gen_img_inf["name"]
-                    gen_img_data_with_ord.append(item)
-            with open(output_json_path1, "w") as json_file1:
-                json.dump(gen_img_data, json_file1, indent=4)
-            with open(output_json_path2, "w") as json_file2:
-                json.dump(gen_img_data_with_ord, json_file2, indent=4)
+            if gen_img is not None:
+                cv2.imwrite(os.path.join(output_folder, gen_img_inf["name"]), gen_img)
+                gen_img_data.append(gen_img_inf)
+                gen_img_data_with_ord.append(gen_img_inf)
+                img_datai = ord_data.copy()
+                for item in img_datai:
+                    if item["name"] == base_img_name:
+                        item["name"] = gen_img_inf["name"]
+                        gen_img_data_with_ord.append(item)
+                with open(output_json_path1, "w") as json_file1:
+                    json.dump(gen_img_data, json_file1, indent=4)
+                with open(output_json_path2, "w") as json_file2:
+                    json.dump(gen_img_data_with_ord, json_file2, indent=4)
 
-        # except:
-        #     with open(error_json_path, "r") as r_error_file:
-        #         error_data_list = json.load(r_error_file)
-        #     error_data_list.append(defect_img_data)
-        #     with open(error_json_path, "w") as w_error_file:
-        #         json.dump(error_data_list, w_error_file, indent=4)
-        #     continue
+        except:
+            with open(error_json_path, "r") as r_error_file:
+                error_data_list = json.load(r_error_file)
+            error_data_list.append(defect_img_data)
+            with open(error_json_path, "w") as w_error_file:
+                json.dump(error_data_list, w_error_file, indent=4)
+            continue
 
 if __name__ == "__main__":
     # main("rotated", "rotated", r"choice\base_img_for41.json", "error_test.json", "error\error_defect4_CAM1.json", "gen_test.json", "gen_test_ord.json", "output\est", "train_annos_rotated_fix.json")
