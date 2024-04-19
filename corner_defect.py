@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import json
 import os
+import math
 from tqdm import tqdm
 
 
@@ -350,8 +351,12 @@ def edge_crop(image, quadrant):
                 break
     
     if crop_y is None and crop_x is None: return image
-    elif quadrant == "top" or quadrant == "bottom": return image[crop_y: , :]
-    else: return image[:, crop_x:]
+    elif quadrant == "top" or quadrant == "bottom": 
+        crop_y = min(crop_y, binary_img.shape[0]-crop_y)
+        return image[crop_y: , :]
+    else: 
+        crop_x = min(crop_x, binary_img.shape[1]-crop_x)
+        return image[:, crop_x:]
 
 
 def defect1(base_img, base_img_name, defect_img, defect_img_data):
@@ -359,11 +364,12 @@ def defect1(base_img, base_img_name, defect_img, defect_img_data):
     dx1, dy1, dx2, dy2 = defect_img_data['bbox']
     defect_img_corner= find_corner(defect_img)
     mid_x, mid_y = ((defect_img_corner[0][0]+defect_img_corner[1][0])/2+(defect_img_corner[2][0]+defect_img_corner[3][0])/2)/2, ((defect_img_corner[0][1]+defect_img_corner[2][1])/2+(defect_img_corner[1][1]+defect_img_corner[3][1])/2)/2
-
-    if dx1>defect_img_corner[0][0] and dx1<defect_img_corner[1][0] and dx2>defect_img_corner[0][0] and dx2<defect_img_corner[1][0] and dy1<mid_y and dy2<mid_y: defect_quadrant="top"
-    elif dx1>defect_img_corner[2][0] and dx1<defect_img_corner[3][0] and dx2>defect_img_corner[2][0] and dx2<defect_img_corner[3][0] and dy1>mid_y and dy2>mid_y: defect_quadrant="bottom"
-    elif dy1>defect_img_corner[0][1] and dy1<defect_img_corner[2][1] and dy2>defect_img_corner[0][1] and dy2<defect_img_corner[2][1] and dx1<mid_x and dx2<mid_x: defect_quadrant="left"
-    elif dy1>defect_img_corner[1][1] and dy1<defect_img_corner[3][1] and dy2>defect_img_corner[1][1] and dy2<defect_img_corner[3][1] and dx1>mid_x and dx2>mid_x: defect_quadrant="right"
+    defect_quadrant = []
+    if dx1>defect_img_corner[0][0] and dx1<defect_img_corner[1][0] and dx2>defect_img_corner[0][0] and dx2<defect_img_corner[1][0] and dy1<mid_y and dy2<mid_y: defect_quadrant.append("top")
+    if dx1>defect_img_corner[2][0] and dx1<defect_img_corner[3][0] and dx2>defect_img_corner[2][0] and dx2<defect_img_corner[3][0] and dy1>mid_y and dy2>mid_y: defect_quadrant.append("bottom")
+    if dy1>defect_img_corner[0][1] and dy1<defect_img_corner[2][1] and dy2>defect_img_corner[0][1] and dy2<defect_img_corner[2][1] and dx1<mid_x and dx2<mid_x: defect_quadrant.append("left")
+    if dy1>defect_img_corner[1][1] and dy1<defect_img_corner[3][1] and dy2>defect_img_corner[1][1] and dy2<defect_img_corner[3][1] and dx1>mid_x and dx2>mid_x: defect_quadrant.append("right")
+    if len(defect_quadrant)==1: defect_quadrant=defect_quadrant[0]
     else:
         if dx1<mid_x and dy1<mid_y:
             if dy2-dy1>dx2-dx1: defect_quadrant="left"
@@ -388,12 +394,12 @@ def defect1(base_img, base_img_name, defect_img, defect_img_data):
         exra_x, exra_y = 10, 30
         exra_y = min(30,min(dy1-defect_img_corner[0][1] if dy1-defect_img_corner[0][1]>0 else 0,defect_img_corner[2][1]-dy2 if defect_img_corner[2][1]-dy2>0 else 0))
     elif defect_quadrant=="right":
-        defect_quadrant="right"
         exra_x, exra_y = 10, 30
         exra_y = min(30,min(dy1-defect_img_corner[1][1] if dy1-defect_img_corner[1][1]>0 else 0,defect_img_corner[3][1]-dy2 if defect_img_corner[3][1]-dy2>0 else 0))
     else: assert False, "无法确定缺陷所在区域"
     defect_img = defect_img[int(dy1-exra_y):int(dy2+exra_y), int(dx1-exra_x):int(dx2+exra_x)]
-    defect_img = edge_crop(defect_img, defect_quadrant)
+    if (defect_quadrant=="top" or defect_quadrant=="left" and dx1<defect_img_corner[0][0] and dx2>defect_img_corner[0][0] and dy1<defect_img_corner[0][1] and dy2>defect_img_corner[0][1]) or (defect_quadrant=="top" or defect_quadrant=="right" and dx1<defect_img_corner[1][0] and dx2>defect_img_corner[1][0] and dy1<defect_img_corner[1][1] and dy2>defect_img_corner[1][1]) or (defect_quadrant=="bottom" or defect_quadrant=="left" and dx1<defect_img_corner[2][0] and dx2>defect_img_corner[2][0] and dy1<defect_img_corner[2][1] and dy2>defect_img_corner[2][1]) or (defect_quadrant=="bottom" or defect_quadrant=="right" and dx1<defect_img_corner[3][0] and dx2>defect_img_corner[3][0] and dy1<defect_img_corner[3][1] and dy2>defect_img_corner[3][1]):
+        defect_img = edge_crop(defect_img, defect_quadrant)
 
     if "_CAM1" in defect_img_data["name"]:
         thresh_min, thresh_max = 100, 130
@@ -433,45 +439,53 @@ def defect1(base_img, base_img_name, defect_img, defect_img_data):
     return result, result_inf
 
 
-def defect2(base_img, base_img_name, defect_img, defect_img_data, thresh_defect=35, thresh_bg=75):
+def defect2(base_img, base_img_name, defect_img_ord, defect_img_data, thresh_defect=35, thresh_bg=75):
     # 截取缺陷图像
     dx1, dy1, dx2, dy2 = defect_img_data['bbox']
     ord_height, ord_width = dy2-dy1, dx2-dx1
-    if dx1-100<0: dx1=100
-    if dy1-100<0: dy1=100
-    if dx2+100>defect_img.shape[1]: dx2=defect_img.shape[1]-100
-    if dy2+100>defect_img.shape[0]: dy2=defect_img.shape[0]-100
-    
-    defect_img = defect_img[int(dy1-100):int(dy2+100), int(dx1-100):int(dx2+100)]
-    mask_all = np.ones(defect_img.shape, dtype=np.uint8) * 255
-    if dx1 < base_img.shape[0]/2:
-        if dy1 < base_img.shape[1]/2:
-            defect_quadrant = "top_left"
+    extend_radius = 100
+    while True:
+        defect_img = defect_img_ord.copy()
+        if dx1-extend_radius<0: dx1=extend_radius
+        if dy1-extend_radius<0: dy1=extend_radius
+        if dx2+extend_radius>defect_img.shape[1]: dx2=defect_img.shape[1]-extend_radius
+        if dy2+extend_radius>defect_img.shape[0]: dy2=defect_img.shape[0]-extend_radius
+        
+        defect_img = defect_img[int(dy1-extend_radius):int(dy2+extend_radius), int(dx1-extend_radius):int(dx2+extend_radius)]
+        mask_all = np.ones(defect_img.shape, dtype=np.uint8) * 255
+        if dx1 < base_img.shape[0]/2:
+            if dy1 < base_img.shape[1]/2:
+                defect_quadrant = "top_left"
+            else:
+                defect_quadrant = "bottom_left"
         else:
-            defect_quadrant = "bottom_left"
-    else:
-        if dy1 < base_img.shape[1]/2:
-            defect_quadrant = "top_right"
+            if dy1 < base_img.shape[1]/2:
+                defect_quadrant = "top_right"
+            else:
+                defect_quadrant = "bottom_right" 
+        
+        if "_CAM1" in defect_img_data["name"]:
+            thresh_min, thresh_max = 100, 130
+            if defect_quadrant == "top_left" or defect_quadrant == "top_right": shadowlen1, shadowlen2 = 85, 0
+            else: shadowlen1, shadowlen2 = 0, 0
+        elif "_CAM2" in defect_img_data["name"]:
+            thresh_min, thresh_max = 35, 60
+            if defect_quadrant == "top_left" or defect_quadrant == "top_right": shadowlen1, shadowlen2 = 55, 0
+            else: shadowlen1, shadowlen2 = 0, 0
+        elif "_CAM3" in defect_img_data["name"]:
+            thresh_min, thresh_max = 35, 70
+            if defect_quadrant == "top_left" or defect_quadrant == "top_right": shadowlen1, shadowlen2 = 0, 0
+            else: shadowlen1, shadowlen2 = 0, 0
         else:
-            defect_quadrant = "bottom_right" 
-    
-    if "_CAM1" in defect_img_data["name"]:
-        thresh_min, thresh_max = 100, 130
-        if defect_quadrant == "top_left" or defect_quadrant == "top_right": shadowlen1, shadowlen2 = 85, 0
-        else: shadowlen1, shadowlen2 = 0, 0
-    elif "_CAM2" in defect_img_data["name"]:
-        thresh_min, thresh_max = 35, 60
-        if defect_quadrant == "top_left" or defect_quadrant == "top_right": shadowlen1, shadowlen2 = 55, 0
-        else: shadowlen1, shadowlen2 = 0, 0
-    elif "_CAM3" in defect_img_data["name"]:
-        thresh_min, thresh_max = 35, 70
-        if defect_quadrant == "top_left" or defect_quadrant == "top_right": shadowlen1, shadowlen2 = 0, 0
-        else: shadowlen1, shadowlen2 = 0, 0
-    else:
-        assert False, "图像名不符合规范！"
+            assert False, "图像名不符合规范！"
 
-    center_point = find_center_point_defect2(base_img,defect_img,defect_quadrant,thresh_min,thresh_max)
-    result = cv2.seamlessClone(defect_img, base_img, mask_all, center_point, cv2.NORMAL_CLONE)
+        center_point = find_center_point_defect2(base_img,defect_img,defect_quadrant,thresh_min,thresh_max)
+        try:
+            result = cv2.seamlessClone(defect_img, base_img, mask_all, center_point, cv2.NORMAL_CLONE)
+            break
+        except:
+            if extend_radius==0: assert False, "底图不足以融合缺陷"
+            extend_radius-=10
 
     defect_img_gray = cv2.cvtColor(defect_img, cv2.COLOR_BGR2GRAY)
     if not "_CAM3" in defect_img_data["name"]:
@@ -532,9 +546,10 @@ def defect2(base_img, base_img_name, defect_img, defect_img_data, thresh_defect=
 def defect3to6(base_img, base_img_name, defect_img, defect_img_data):
     # 截取缺陷图像
     dx1, dy1, dx2, dy2 = defect_img_data['bbox']
-    if defect_img_data["category"]==3: offset_x, offset_y = max(5,0.25*(dx2-dx1)), max(5,0.25*(dy2-dy1))
-    elif defect_img_data["category"]==4: offset_x, offset_y = max(5,0.15*(dx2-dx1)), max(5,0.15*(dy2-dy1))
-    elif defect_img_data["category"]==5: offset_x, offset_y = max(5,0.4*(dx2-dx1)), max(5,0.4*(dy2-dy1))
+    minoffset_x, minoffset_y = math.ceil((30-(dx2-dx1))/2), math.ceil((30-(dy2-dy1))/2)
+    if defect_img_data["category"]==3: offset_x, offset_y = max(max(5,minoffset_x),0.25*(dx2-dx1)), max(max(5,minoffset_y),0.25*(dy2-dy1))
+    elif defect_img_data["category"]==4: offset_x, offset_y = max(max(5,minoffset_x),0.15*(dx2-dx1)), max(max(5,minoffset_y),0.15*(dy2-dy1))
+    elif defect_img_data["category"]==5: offset_x, offset_y = max(max(5,minoffset_x),0.4*(dx2-dx1)), max(max(5,minoffset_y),0.4*(dy2-dy1))
     else: offset_x, offset_y = 5, 5
     defect_img = defect_img[int(dy1-offset_y):int(dy2+offset_y), int(dx1-offset_x):int(dx2+offset_x)]
 
@@ -549,53 +564,6 @@ def defect3to6(base_img, base_img_name, defect_img, defect_img_data):
         center_point = (np.random.uniform(min_dis_x, base_width-min_dis_x),np.random.uniform(min_dis_y, base_height-min_dis_x))
         valid_center_img = valid_area[int(center_point[1]-defect_img.shape[0]//2):int(center_point[1]+defect_img.shape[0]//2), int(center_point[0]-defect_img.shape[1]//2):int(center_point[0]+defect_img.shape[1]//2)]
     center_point = (int(center_point[0]), int(center_point[1]))
-
-    # base_point = (int(center_point[0]-defect_img.shape[1]//2), int(center_point[1]-defect_img.shape[0]//2))
-    # target_img = base_img[base_point[1]:base_point[1]+defect_img.shape[0], base_point[0]:base_point[0]+defect_img.shape[1]]
-    # input_img = defect_img.copy()
-
-    # aab = target_img.copy()
-    # defect_img_gray = cv2.cvtColor(input_img, cv2.COLOR_BGR2GRAY)
-    # _, defect_mask = cv2.threshold(defect_img_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # if defect_mask[0, 0] == 255 and defect_mask[0, defect_img.shape[1]-1] == 255 and defect_mask[defect_img.shape[0]-1, 0] == 255 and defect_mask[defect_img.shape[0]-1, defect_img.shape[1]-1] == 255: defect_mask=cv2.bitwise_not(defect_mask)
-    # black_pixels_input = input_img[defect_mask == 0]
-    # black_pixels_target = target_img[defect_mask == 0]
-    # white_pixels_input = input_img[defect_mask == 255]
-    # white_pixels_target = target_img[defect_mask == 255]
-    # # 计算黑色部分的点的平均像素值
-    # average_black_color_input = np.mean(black_pixels_input, axis=0)
-    # average_black_color_target = np.mean(black_pixels_target, axis=0)
-    # # 计算白色部分的点的平均像素值
-    # average_white_color_input = np.mean(white_pixels_input, axis=0)
-    # average_white_color_target = np.mean(white_pixels_target, axis=0)
-
-    # for y in range(0, defect_img.shape[0]):
-    #     for x in range(0, defect_img.shape[1]):
-    #         if defect_mask[y, x] == 255:
-    #             aab[y, x] =  input_img[y, x]
-    # mask_all = np.ones(defect_img.shape, dtype=np.uint8) * 255
-    # bbc = cv2.seamlessClone(aab, base_img, mask_all, center_point, cv2.NORMAL_CLONE)
-    # bbc=bbc[base_point[1]:base_point[1]+defect_img.shape[0], base_point[0]:base_point[0]+defect_img.shape[1]]
-    # cv2.imwrite("bbc.jpg",bbc)
-    
-    # # 计算两个图像的平均亮度和标准差
-    # input_mean, input_std = cv2.meanStdDev(input_img)
-    # target_mean, target_std = cv2.meanStdDev(target_img)
-    # input_mean, input_std = float(input_mean[0][0]), float(input_std[0][0])
-    # target_mean, target_std = float(target_mean[0][0]), float(target_std[0][0])
-    
-    # # 调整对比度和亮度
-    # if input_std != 0:
-    #     gain = target_std / input_std
-    # else:
-    #     gain = 1.0
-    # bias = target_mean - gain * input_mean
-    
-    # adjusted_img = cv2.convertScaleAbs(input_img, alpha=gain, beta=bias)
-
-    # ababa=cv2.seamlessClone(input_img, target_img, np.ones(input_img.shape, dtype=np.uint8) * 255, (input_img.shape[1]//2, input_img.shape[0]//2), cv2.NORMAL_CLONE)
-    
-
 
     mask_all = np.ones(defect_img.shape, dtype=np.uint8) * 255
     result = cv2.seamlessClone(defect_img, base_img, mask_all, center_point, cv2.NORMAL_CLONE)
@@ -628,75 +596,112 @@ def defect3to6(base_img, base_img_name, defect_img, defect_img_data):
 
     return result, result_inf
 
-if __name__ == "__main__":
-    # num=1
-    defect_imgs_path = 'rotated'
-    defect_imgs = os.listdir(defect_imgs_path)
+def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, error_json_path, output_json_path1, output_json_path2, output_folder, ord_json_path):
+    # defect_imgs_path = 'rotated'
+    # defect_imgs = os.listdir(defect_imgs_path)
 
-    base_imgs_path = 'base_img'
-    base_imgs = os.listdir(base_imgs_path)
+    # base_imgs_path = 'rotated'
+    # base_imgs = os.listdir(base_imgs_path)
 
-    input_json_path = "train_annos_rotated_fix.json"
-    error_json_path = "corner_defect_error.json"
-    output_json_path = "gen_train_annos.json"
+    # input_json_path = "train_annos_rotated_fix.json"
+    # error_json_path = "corner_defect_error.json"
+    # output_json_path = "gen_train_annos.json"
 
-    output_folder = "output"    
+    # output_folder = "output"    
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    if not os.path.exists(output_json_path):
-        with open(output_json_path, "w") as wnfile:
-            json.dump([], wnfile)
+    if not os.path.exists(output_json_path1):
+        with open(output_json_path1, "w") as wnfile1:
+            json.dump([], wnfile1)
+
+    if not os.path.exists(output_json_path2):
+        with open(output_json_path2, "w") as wnfile2:
+            json.dump([], wnfile2)
 
     if not os.path.exists(error_json_path):
         with open(error_json_path, "w") as errorfile:
             json.dump([], errorfile)
 
-    with open(input_json_path, 'r') as f:
-        img_data = json.load(f)
+    with open(base_json_path, 'r') as base_f:
+        base_imgs = json.load(base_f)
+    base_img_names = [list(data.keys())[0] for data in base_imgs]
 
-    with open(output_json_path, "r") as rnfile:
-        gen_img_data = json.load(rnfile)
+    with open(defect_json_path, 'r') as defect_f:
+        defect_imgs_data = json.load(defect_f)
 
-    for base_img_name in base_imgs:
+    with open(output_json_path1, "r") as rnfile1:
+        gen_img_data = json.load(rnfile1)
+
+    with open(output_json_path2, "r") as rnfile2:
+        gen_img_data_with_ord = json.load(rnfile2)
+
+    with open(ord_json_path, "r") as ordfile:
+        ord_data = json.load(ordfile)
+
+    # for base_img_name in base_imgs:
+    #     base_img = cv2.imread(os.path.join(base_imgs_path, base_img_name))
+    for defect_img_data, base_img_name in tqdm(zip(defect_imgs_data,base_img_names), total=167):
+        defect_img_name = defect_img_data["name"]
+        gen_img = None
+
+        # try:
+            # if base_img_name[base_img_name.index("_CAM"):] == defect_img_name[defect_img_name.index("_CAM"):]:
         base_img = cv2.imread(os.path.join(base_imgs_path, base_img_name))
-        for defect_img_data in tqdm(img_data):
-            defect_img_name = defect_img_data["name"]
-            gen_img = None
+        defect_img = cv2.imread(os.path.join(defect_imgs_path, defect_img_name))
+        if base_img is None: assert False, "底图不存在！"
+        if defect_img is None: assert False, "缺陷图像不存在！"
 
-            try:
-                if base_img_name[base_img_name.index("_CAM"):] == defect_img_name[defect_img_name.index("_CAM"):]:
-                    defect_img = cv2.imread(os.path.join(defect_imgs_path, defect_img_name))
-                    if defect_img is None: assert False, "缺陷图像不存在！"
+        if defect_img_data["category"] == 1 :
+            gen_img, gen_img_inf=defect1(base_img, base_img_name, defect_img, defect_img_data)
+            
+        elif defect_img_data["category"] == 2 :
+            gen_img, gen_img_inf=defect2(base_img, base_img_name, defect_img, defect_img_data)
 
-                    if defect_img_data["category"] == 1 :
-                        gen_img, gen_img_inf=defect1(base_img, base_img_name, defect_img, defect_img_data)
-                        
-                    elif defect_img_data["category"] == 2 :
-                        gen_img, gen_img_inf=defect2(base_img, base_img_name, defect_img, defect_img_data)
+        elif defect_img_data["category"] == 3 or defect_img_data["category"] == 4 or defect_img_data["category"] == 5 or defect_img_data["category"] == 6: 
+            gen_img, gen_img_inf=defect3to6(base_img, base_img_name, defect_img, defect_img_data)
+            # sub_gen_img = gen_img[int(gen_img_inf["bbox"][1]-50):int(gen_img_inf["bbox"][3]+50), int(gen_img_inf["bbox"][0]-50):int(gen_img_inf["bbox"][2]+50)]
+            # sub_img = defect_img[int(gen_img_inf["defect_bbox"][1]-50):int(gen_img_inf["defect_bbox"][3]+50), int(gen_img_inf["defect_bbox"][0]-50):int(gen_img_inf["defect_bbox"][2]+50)]
 
-                    elif defect_img_data["category"] == 3 or defect_img_data["category"] == 4 or defect_img_data["category"] == 5 or defect_img_data["category"] == 6: 
-                        gen_img, gen_img_inf=defect3to6(base_img, base_img_name, defect_img, defect_img_data)
-                        sub_gen_img = gen_img[int(gen_img_inf["bbox"][1]-50):int(gen_img_inf["bbox"][3]+50), int(gen_img_inf["bbox"][0]-50):int(gen_img_inf["bbox"][2]+50)]
-                        sub_img = defect_img[int(gen_img_inf["defect_bbox"][1]-50):int(gen_img_inf["defect_bbox"][3]+50), int(gen_img_inf["defect_bbox"][0]-50):int(gen_img_inf["defect_bbox"][2]+50)]
+        if gen_img is not None:
+            cv2.imwrite(os.path.join(output_folder, gen_img_inf["name"]), gen_img)
+            gen_img_data.append(gen_img_inf)
+            gen_img_data_with_ord.append(gen_img_inf)
+            img_datai = ord_data.copy()
+            for item in img_datai:
+                if item["name"] == base_img_name:
+                    item["name"] = gen_img_inf["name"]
+                    gen_img_data_with_ord.append(item)
+            with open(output_json_path1, "w") as json_file1:
+                json.dump(gen_img_data, json_file1, indent=4)
+            with open(output_json_path2, "w") as json_file2:
+                json.dump(gen_img_data_with_ord, json_file2, indent=4)
 
-                if gen_img is not None:
-                    cv2.imwrite(os.path.join(output_folder, gen_img_inf["name"]), gen_img)
-                    cv2.imwrite(os.path.join(output_folder, "sub_"+gen_img_inf["name"]), sub_gen_img)
-                    cv2.imwrite(os.path.join(output_folder, "sub_"+gen_img_inf["defect_img_name"]), sub_img)
-                    gen_img_data.append(gen_img_inf)
-                    img_datai = img_data.copy()
-                    for item in img_datai:
-                        if item["name"] == base_img_name:
-                            item["name"] = gen_img_inf["name"]
-                            gen_img_data.append(item)
-                    with open(output_json_path, "w") as wnfile:
-                        json.dump(gen_img_data, wnfile, indent=4)
+        # except:
+        #     with open(error_json_path, "r") as r_error_file:
+        #         error_data_list = json.load(r_error_file)
+        #     error_data_list.append(defect_img_data)
+        #     with open(error_json_path, "w") as w_error_file:
+        #         json.dump(error_data_list, w_error_file, indent=4)
+        #     continue
 
-            except:
-                with open(error_json_path, "r") as error_file:
-                    error_data_list = json.load(error_file)
-                error_data_list.append(defect_img_data)
-                with open(error_json_path, "w") as error_file:
-                    json.dump(error_data_list, error_file, indent=4)
-                continue
+if __name__ == "__main__":
+    # main("rotated", "rotated", r"choice\base_img_for41.json", "error_test.json", "error\error_defect4_CAM1.json", "gen_test.json", "gen_test_ord.json", "output\est", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for11.json", "choice\defect1_CAM1_img.json", "error\error_defect1_CAM1.json", "output\defect1\gen_defect1_CAM1.json", "output\defect1\gen_defect1_CAM1_with_ord.json", "output\defect1\CAM1", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for12.json", "choice\defect1_CAM2_img.json", "error\error_defect1_CAM2.json", "output\defect1\gen_defect1_CAM2.json", "output\defect1\gen_defect1_CAM2_with_ord.json", "output\defect1\CAM2", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for13.json", "choice\defect1_CAM3_img.json", "error\error_defect1_CAM3.json", "output\defect1\gen_defect1_CAM3.json", "output\defect1\gen_defect1_CAM3_with_ord.json", "output\defect1\CAM3", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for21.json", "choice\defect2_CAM1_img.json", "error\error_defect2_CAM1.json", "output\defect2\gen_defect2_CAM1.json", "output\defect2\gen_defect2_CAM1_with_ord.json", "output\defect2\CAM1", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for22.json", "choice\defect2_CAM2_img.json", "error\error_defect2_CAM2.json", "output\defect2\gen_defect2_CAM2.json", "output\defect2\gen_defect2_CAM2_with_ord.json", "output\defect2\CAM2", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for23.json", "choice\defect2_CAM3_img.json", "error\error_defect2_CAM3.json", "output\defect2\gen_defect2_CAM3.json", "output\defect2\gen_defect2_CAM3_with_ord.json", "output\defect2\CAM3", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for31.json", "choice\defect3_CAM1_img.json", "error\error_defect3_CAM1.json", "output\defect3\gen_defect3_CAM1.json", "output\defect3\gen_defect3_CAM1_with_ord.json", "output\defect3\CAM1", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for32.json", "choice\defect3_CAM2_img.json", "error\error_defect3_CAM2.json", "output\defect3\gen_defect3_CAM2.json", "output\defect3\gen_defect3_CAM2_with_ord.json", "output\defect3\CAM2", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for33.json", "choice\defect3_CAM3_img.json", "error\error_defect3_CAM3.json", "output\defect3\gen_defect3_CAM3.json", "output\defect3\gen_defect3_CAM3_with_ord.json", "output\defect3\CAM3", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for41.json", "choice\defect4_CAM1_img.json", "error\error_defect4_CAM1.json", "output\defect4\gen_defect4_CAM1.json", "output\defect4\gen_defect4_CAM1_with_ord.json", "output\defect4\CAM1", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for42.json", "choice\defect4_CAM2_img.json", "error\error_defect4_CAM2.json", "output\defect4\gen_defect4_CAM2.json", "output\defect4\gen_defect4_CAM2_with_ord.json", "output\defect4\CAM2", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for43.json", "choice\defect4_CAM3_img.json", "error\error_defect4_CAM3.json", "output\defect4\gen_defect4_CAM3.json", "output\defect4\gen_defect4_CAM3_with_ord.json", "output\defect4\CAM3", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for51.json", "choice\defect5_CAM1_img.json", "error\error_defect5_CAM1.json", "output\defect5\gen_defect5_CAM1.json", "output\defect5\gen_defect5_CAM1_with_ord.json", "output\defect5\CAM1", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for52.json", "choice\defect5_CAM2_img.json", "error\error_defect5_CAM2.json", "output\defect5\gen_defect5_CAM2.json", "output\defect5\gen_defect5_CAM2_with_ord.json", "output\defect5\CAM2", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for53.json", "choice\defect5_CAM3_img.json", "error\error_defect5_CAM3.json", "output\defect5\gen_defect5_CAM3.json", "output\defect5\gen_defect5_CAM3_with_ord.json", "output\defect5\CAM3", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for61.json", "choice\defect6_CAM1_img.json", "error\error_defect6_CAM1.json", "output\defect6\gen_defect6_CAM1.json", "output\defect6\gen_defect6_CAM1_with_ord.json", "output\defect6\CAM1", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for62.json", "choice\defect6_CAM2_img.json", "error\error_defect6_CAM2.json", "output\defect6\gen_defect6_CAM2.json", "output\defect6\gen_defect6_CAM2_with_ord.json", "output\defect6\CAM2", "train_annos_rotated_fix.json")
+    main("rotated", "rotated", r"choice\base_img_for63.json", "choice\defect6_CAM3_img.json", "error\error_defect6_CAM3.json", "output\defect6\gen_defect6_CAM3.json", "output\defect6\gen_defect6_CAM3_with_ord.json", "output\defect6\CAM3", "train_annos_rotated_fix.json")
