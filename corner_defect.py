@@ -3,6 +3,8 @@ import numpy as np
 import json
 import os
 import math
+import concurrent.futures
+import preprocessing
 from tqdm import tqdm
 
 
@@ -46,29 +48,29 @@ def compute_intersection(line1, line2):
     return (px, py)
 
 
-def find_missing_corner(defect_img,thresh_min,thresh_max,defect_quadrant):
+def find_missing_corner(defect_img, thresh_min, thresh_max, defect_quadrant):
     gray = cv2.cvtColor(defect_img, cv2.COLOR_BGR2GRAY)
     #blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     edged = cv2.Canny(gray, thresh_min, thresh_max)
     # 使用霍夫线变换找到线段
     lines = cv2.HoughLinesP(edged, 1, np.pi / 180, threshold=5, minLineLength=5, maxLineGap=5)
-    vertical_points ,horizontal_points=find_corners_of_approx_parallel_lines(lines, angle_tolerance=10)
+    vertical_points, horizontal_points = find_corners_of_approx_parallel_lines(lines, angle_tolerance=10)
 
     height, width = defect_img.shape[:2]
-    if defect_quadrant=="top_left" :
-        vertical_point=min(vertical_points, key=lambda point: point[0]**2 + (height-point[1])**2)
-        horizontal_point=min(horizontal_points, key=lambda point: (width-point[0])**2 + point[1]**2)
-    elif defect_quadrant=="top_right" :
-        vertical_point=min(vertical_points, key=lambda point: (width-point[0])**2 + (height-point[1])**2)
-        horizontal_point=min(horizontal_points, key=lambda point: point[0]**2 + point[1]**2)
-    elif defect_quadrant=="bottom_left" :
-        vertical_point=min(vertical_points, key=lambda point: point[0]**2 + point[1 ]**2)
-        horizontal_point=min(horizontal_points, key=lambda point: (width-point[0])**2 + (height-point[1])**2)
+    if defect_quadrant == "top_left" :
+        vertical_point = min(vertical_points, key=lambda point: point[0]**2 + (height-point[1])**2)
+        horizontal_point = min(horizontal_points, key=lambda point: (width-point[0])**2 + point[1]**2)
+    elif defect_quadrant == "top_right" :
+        vertical_point = min(vertical_points, key=lambda point: (width-point[0])**2 + (height-point[1])**2)
+        horizontal_point = min(horizontal_points, key=lambda point: point[0]**2 + point[1]**2)
+    elif defect_quadrant == "bottom_left" :
+        vertical_point = min(vertical_points, key=lambda point: point[0]**2 + point[1 ]**2)
+        horizontal_point = min(horizontal_points, key=lambda point: (width-point[0])**2 + (height-point[1])**2)
     else:
-        vertical_point=min(vertical_points, key=lambda point: (width-point[0])**2 + point[1]**2)
-        horizontal_point=min(horizontal_points, key=lambda point: point[0]**2 + (height-point[1])**2)
+        vertical_point = min(vertical_points, key=lambda point: (width-point[0])**2 + point[1]**2)
+        horizontal_point = min(horizontal_points, key=lambda point: point[0]**2 + (height-point[1])**2)
 
-    return vertical_point,horizontal_point
+    return vertical_point, horizontal_point
 
 
 def find_corner(image, quadrant="top_left, top_right, bottom_left, bottom_right"):
@@ -184,6 +186,7 @@ def find_center_point_defect2(base_img,defect_img,defect_quadrant,thresh_min,thr
     base_corner=find_corner(base_img, defect_quadrant)
     base_img_gray=cv2.cvtColor(base_img, cv2.COLOR_BGR2GRAY)
     edge_img=base_img_gray[int(base_corner[1]-80):int(base_corner[1]+80),int(base_corner[0]+quadrant_corner[0]-80):int(base_corner[0]+quadrant_corner[0]+80)]
+    if edge_img.shape[0]==0 or edge_img.shape[1]==0: assert False, "底图距离边缘位置过近, 不足以融合缺陷"
 
     edge=cv2.Canny(edge_img, thresh_min, thresh_max)
     edge_y=80
@@ -557,11 +560,13 @@ def defect3to6(base_img, base_img_name, defect_img, defect_img_data):
     base_width = (corners[1][0]-corners[0][0]+corners[3][0]-corners[2][0])/2
     base_height = (corners[2][1]-corners[0][1]+corners[3][1]-corners[1][1])/2
     min_dis_x, min_dis_y = defect_img.shape[1]//2, defect_img.shape[0]//2
-    center_point = (np.random.uniform(min_dis_x, base_width-min_dis_x),np.random.uniform(min_dis_y, base_height-min_dis_x))
+    center_point = (np.random.uniform(min_dis_x, base_width-min_dis_x),np.random.uniform(min_dis_y, base_height-min_dis_y))
+    center_point = (center_point[0]+corners[0][0],center_point[1]+corners[0][1])
     _, valid_area = cv2.threshold(cv2.cvtColor(base_img, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     valid_center_img = valid_area[int(center_point[1]-defect_img.shape[0]//2):int(center_point[1]+defect_img.shape[0]//2), int(center_point[0]-defect_img.shape[1]//2):int(center_point[0]+defect_img.shape[1]//2)]
     while (not np.all(valid_center_img == 255)):
-        center_point = (np.random.uniform(min_dis_x, base_width-min_dis_x),np.random.uniform(min_dis_y, base_height-min_dis_x))
+        center_point = (np.random.uniform(min_dis_x, base_width-min_dis_x),np.random.uniform(min_dis_y, base_height-min_dis_y))
+        center_point = (center_point[0]+corners[0][0],center_point[1]+corners[0][1])
         valid_center_img = valid_area[int(center_point[1]-defect_img.shape[0]//2):int(center_point[1]+defect_img.shape[0]//2), int(center_point[0]-defect_img.shape[1]//2):int(center_point[0]+defect_img.shape[1]//2)]
     center_point = (int(center_point[0]), int(center_point[1]))
 
@@ -591,23 +596,12 @@ def defect3to6(base_img, base_img_name, defect_img, defect_img_data):
         "image_height": base_img.shape[0],
         "image_width": base_img.shape[1],
         "category": defect_img_data["category"],
-        "bbox": [center_point[0]-defect_img.shape[1]/2,center_point[1]-defect_img.shape[0]/2,center_point[0]-defect_img.shape[1]/2+defect_img.shape[1],center_point[1]-defect_img.shape[0]/2+defect_img.shape[0]]
+        "bbox": [center_point[0]-defect_img.shape[1]/2+offset_x,center_point[1]-defect_img.shape[0]/2+offset_y,center_point[0]-defect_img.shape[1]/2+defect_img.shape[1]-offset_x,center_point[1]-defect_img.shape[0]/2+defect_img.shape[0]-offset_y]
     }
 
     return result, result_inf
 
-def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, error_json_path, output_json_path1, output_json_path2, output_folder, ord_json_path):
-    # defect_imgs_path = 'rotated'
-    # defect_imgs = os.listdir(defect_imgs_path)
-
-    # base_imgs_path = 'rotated'
-    # base_imgs = os.listdir(base_imgs_path)
-
-    # input_json_path = "train_annos_rotated_fix.json"
-    # error_json_path = "corner_defect_error.json"
-    # output_json_path = "gen_train_annos.json"
-
-    # output_folder = "output"    
+def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, error_json_path, output_json_path1, output_json_path2, output_folder, ord_json_path, multi_state, process_num):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -639,14 +633,13 @@ def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, err
     with open(ord_json_path, "r") as ordfile:
         ord_data = json.load(ordfile)
 
-    # for base_img_name in base_imgs:
-    #     base_img = cv2.imread(os.path.join(base_imgs_path, base_img_name))
-    for defect_img_data, base_img_name in tqdm(zip(defect_imgs_data,base_img_names), total=167):
+    pbar=tqdm(total=len(base_img_names), desc="defect"+str(defect_imgs_data[0]["category"])+"_CAM"+str(int(base_img_names[0][base_img_names[0].index("_CAM")+4:base_img_names[0].index("_CAM")+5])), position=process_num ,leave=True)
+    
+    for defect_img_data, base_img_name in zip(defect_imgs_data,base_img_names):
         defect_img_name = defect_img_data["name"]
         gen_img = None
 
         try:
-            # if base_img_name[base_img_name.index("_CAM"):] == defect_img_name[defect_img_name.index("_CAM"):]:
             base_img = cv2.imread(os.path.join(base_imgs_path, base_img_name))
             defect_img = cv2.imread(os.path.join(defect_imgs_path, defect_img_name))
             if base_img is None: assert False, "底图不存在！"
@@ -657,9 +650,15 @@ def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, err
                 
             elif defect_img_data["category"] == 2 :
                 gen_img, gen_img_inf=defect2(base_img, base_img_name, defect_img, defect_img_data)
+                if(multi_state==True):
+                    for num in range(len(gen_img_inf)):
+                        gen_img_inf[num]["category"]=base_json_path[base_json_path.index("2_"):base_json_path.index("_CAM")]                       
 
             elif defect_img_data["category"] == 3 or defect_img_data["category"] == 4 or defect_img_data["category"] == 5 or defect_img_data["category"] == 6: 
                 gen_img, gen_img_inf=defect3to6(base_img, base_img_name, defect_img, defect_img_data)
+                if(multi_state==True):
+                    for num in range(len(gen_img_inf)):
+                        gen_img_inf[num]["category"]=base_json_path[base_json_path.index("6_"):base_json_path.index("_CAM")]
                 # sub_gen_img = gen_img[int(gen_img_inf["bbox"][1]-50):int(gen_img_inf["bbox"][3]+50), int(gen_img_inf["bbox"][0]-50):int(gen_img_inf["bbox"][2]+50)]
                 # sub_img = defect_img[int(gen_img_inf["defect_bbox"][1]-50):int(gen_img_inf["defect_bbox"][3]+50), int(gen_img_inf["defect_bbox"][0]-50):int(gen_img_inf["defect_bbox"][2]+50)]
 
@@ -676,32 +675,36 @@ def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, err
                     json.dump(gen_img_data, json_file1, indent=4)
                 with open(output_json_path2, "w") as json_file2:
                     json.dump(gen_img_data_with_ord, json_file2, indent=4)
+                pbar.update(1)
 
         except:
             with open(error_json_path, "r") as r_error_file:
                 error_data_list = json.load(r_error_file)
             error_data_list.append(defect_img_data)
+            error_data_list.append(base_img_name)
             with open(error_json_path, "w") as w_error_file:
                 json.dump(error_data_list, w_error_file, indent=4)
+            pbar.update(1)
             continue
+    pbar.close()
 
 if __name__ == "__main__":
-    # main("rotated", "rotated", r"choice\base_img_for41.json", "error_test.json", "error\error_defect4_CAM1.json", "gen_test.json", "gen_test_ord.json", "output\est", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for11.json", "choice\defect1_CAM1_img.json", "error\error_defect1_CAM1.json", "output\defect1\gen_defect1_CAM1.json", "output\defect1\gen_defect1_CAM1_with_ord.json", "output\defect1\CAM1", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for12.json", "choice\defect1_CAM2_img.json", "error\error_defect1_CAM2.json", "output\defect1\gen_defect1_CAM2.json", "output\defect1\gen_defect1_CAM2_with_ord.json", "output\defect1\CAM2", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for13.json", "choice\defect1_CAM3_img.json", "error\error_defect1_CAM3.json", "output\defect1\gen_defect1_CAM3.json", "output\defect1\gen_defect1_CAM3_with_ord.json", "output\defect1\CAM3", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for21.json", "choice\defect2_CAM1_img.json", "error\error_defect2_CAM1.json", "output\defect2\gen_defect2_CAM1.json", "output\defect2\gen_defect2_CAM1_with_ord.json", "output\defect2\CAM1", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for22.json", "choice\defect2_CAM2_img.json", "error\error_defect2_CAM2.json", "output\defect2\gen_defect2_CAM2.json", "output\defect2\gen_defect2_CAM2_with_ord.json", "output\defect2\CAM2", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for23.json", "choice\defect2_CAM3_img.json", "error\error_defect2_CAM3.json", "output\defect2\gen_defect2_CAM3.json", "output\defect2\gen_defect2_CAM3_with_ord.json", "output\defect2\CAM3", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for31.json", "choice\defect3_CAM1_img.json", "error\error_defect3_CAM1.json", "output\defect3\gen_defect3_CAM1.json", "output\defect3\gen_defect3_CAM1_with_ord.json", "output\defect3\CAM1", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for32.json", "choice\defect3_CAM2_img.json", "error\error_defect3_CAM2.json", "output\defect3\gen_defect3_CAM2.json", "output\defect3\gen_defect3_CAM2_with_ord.json", "output\defect3\CAM2", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for33.json", "choice\defect3_CAM3_img.json", "error\error_defect3_CAM3.json", "output\defect3\gen_defect3_CAM3.json", "output\defect3\gen_defect3_CAM3_with_ord.json", "output\defect3\CAM3", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for41.json", "choice\defect4_CAM1_img.json", "error\error_defect4_CAM1.json", "output\defect4\gen_defect4_CAM1.json", "output\defect4\gen_defect4_CAM1_with_ord.json", "output\defect4\CAM1", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for42.json", "choice\defect4_CAM2_img.json", "error\error_defect4_CAM2.json", "output\defect4\gen_defect4_CAM2.json", "output\defect4\gen_defect4_CAM2_with_ord.json", "output\defect4\CAM2", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for43.json", "choice\defect4_CAM3_img.json", "error\error_defect4_CAM3.json", "output\defect4\gen_defect4_CAM3.json", "output\defect4\gen_defect4_CAM3_with_ord.json", "output\defect4\CAM3", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for51.json", "choice\defect5_CAM1_img.json", "error\error_defect5_CAM1.json", "output\defect5\gen_defect5_CAM1.json", "output\defect5\gen_defect5_CAM1_with_ord.json", "output\defect5\CAM1", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for52.json", "choice\defect5_CAM2_img.json", "error\error_defect5_CAM2.json", "output\defect5\gen_defect5_CAM2.json", "output\defect5\gen_defect5_CAM2_with_ord.json", "output\defect5\CAM2", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for53.json", "choice\defect5_CAM3_img.json", "error\error_defect5_CAM3.json", "output\defect5\gen_defect5_CAM3.json", "output\defect5\gen_defect5_CAM3_with_ord.json", "output\defect5\CAM3", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for61.json", "choice\defect6_CAM1_img.json", "error\error_defect6_CAM1.json", "output\defect6\gen_defect6_CAM1.json", "output\defect6\gen_defect6_CAM1_with_ord.json", "output\defect6\CAM1", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for62.json", "choice\defect6_CAM2_img.json", "error\error_defect6_CAM2.json", "output\defect6\gen_defect6_CAM2.json", "output\defect6\gen_defect6_CAM2_with_ord.json", "output\defect6\CAM2", "train_annos_rotated_fix.json")
-    main("rotated", "rotated", r"choice\base_img_for63.json", "choice\defect6_CAM3_img.json", "error\error_defect6_CAM3.json", "output\defect6\gen_defect6_CAM3.json", "output\defect6\gen_defect6_CAM3_with_ord.json", "output\defect6\CAM3", "train_annos_rotated_fix.json")
+    defect_list = [11,12,13,21,22,23,31,32,33,41,42,43,51,52,53,61,62,63]
+    gen_img_num = 60
+
+    preprocessing.create_error_json(defect_list)
+    preprocessing.select_json(gen_img_num,defect_list)
+
+    base_imgs_path = ["rotated" for i in range(len(defect_list))]
+    defect_imgs_path = ["rotated" for i in range(len(defect_list))]
+    base_json_path = [r"choice\base_img_for"+str(i)+".json" for i in defect_list]
+    defect_json_path = ["choice\defect"+str(i//10)+"_CAM"+str(i%10)+"_img.json" for i in defect_list]
+    error_json_path = ["error\error_defect"+str(i//10)+"_CAM"+str(i%10)+".json" for i in defect_list]
+    output_json_path1 = ["output\defect"+str(i//10)+"\gen_defect"+str(i//10)+"_CAM"+str(i%10)+".json" for i in defect_list]
+    output_json_path2 = ["output\defect"+str(i//10)+"\gen_defect"+str(i//10)+"_CAM"+str(i%10)+"_with_ord.json" for i in defect_list]
+    output_folder = ["output\defect"+str(i//10)+"\CAM"+str(i%10) for i in defect_list]
+    ord_json_path = ["train_annos_rotated_fix.json" for i in range(len(defect_list))]
+    multi_state = [False for i in range(len(defect_list))]
+
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        executor.map(main, base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, error_json_path, output_json_path1, output_json_path2, output_folder, ord_json_path, multi_state, range(len(defect_list)))
