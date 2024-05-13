@@ -442,7 +442,7 @@ def defect1(base_img, base_img_name, defect_img, defect_img_data):
     return result, result_inf
 
 
-def defect2(base_img, base_img_name, defect_img_ord, defect_img_data, thresh_defect=35, thresh_bg=75):
+def defect2(base_img, base_img_name, defect_img_ord, defect_img_data, thresh_defect=35, thresh_bg=75, texture_state=False):
     # 截取缺陷图像
     dx1, dy1, dx2, dy2 = defect_img_data['bbox']
     ord_height, ord_width = dy2-dy1, dx2-dx1
@@ -527,9 +527,10 @@ def defect2(base_img, base_img_name, defect_img_ord, defect_img_data, thresh_def
     defect_img_ana = result[defect_point[1]:defect_point[1]+defect_img.shape[0], defect_point[0]:defect_point[0]+defect_img.shape[1]]
     _,mask_ana=cv2.threshold(defect_img_gray, thresh_max, 255, cv2.THRESH_BINARY_INV)
     kernel = np.ones((int((max(defect_img.shape[0],defect_img.shape[1])*0.05)),int((max(defect_img.shape[0],defect_img.shape[1])*0.05))), np.uint8)
-    dilated_mask = cv2.dilate(mask_ana, kernel, iterations=1)
-    dilated_mask = cv2.blur(dilated_mask, (2, 2))
-    result = cv2.seamlessClone(defect_img_ana, base_img, dilated_mask, center_point, cv2.NORMAL_CLONE)
+    if texture_state==False:
+        mask_ana = cv2.dilate(mask_ana, kernel, iterations=1)
+        mask_ana = cv2.blur(mask_ana, (2, 2))
+    result = cv2.seamlessClone(defect_img_ana, base_img, mask_ana, center_point, cv2.NORMAL_CLONE)
 
     result_inf={
         "name": base_img_name[:base_img_name.index("_CAM")]+str(int(center_point[0]))+str(int(center_point[1]))+base_img_name[base_img_name.index("_CAM"):],
@@ -546,7 +547,7 @@ def defect2(base_img, base_img_name, defect_img_ord, defect_img_data, thresh_def
     return result, result_inf
 
 
-def defect3to6(base_img, base_img_name, defect_img, defect_img_data):
+def defect3to6(base_img, base_img_name, defect_img, defect_img_data, texture_state=False):
     # 截取缺陷图像
     dx1, dy1, dx2, dy2 = defect_img_data['bbox']
     minoffset_x, minoffset_y = math.ceil((30-(dx2-dx1))/2), math.ceil((30-(dy2-dy1))/2)
@@ -577,8 +578,10 @@ def defect3to6(base_img, base_img_name, defect_img, defect_img_data):
         defect_img_gray = cv2.cvtColor(defect_img, cv2.COLOR_BGR2GRAY)
         _, defect_mask = cv2.threshold(defect_img_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         if (np.count_nonzero(defect_mask[0, :] == 255)+np.count_nonzero(defect_mask[:, 0] == 255)+np.count_nonzero(defect_mask[defect_mask.shape[0] - 1, :] == 255)+np.count_nonzero(defect_mask[:, defect_mask.shape[1] - 1] == 255))>=(defect_mask.shape[1]-1)*2+(defect_mask.shape[0]-1)*2*1/3: defect_mask=cv2.bitwise_not(defect_mask)
-        kernel = np.ones((int(max((max(defect_img.shape[0],defect_img.shape[1])*0.05),2)),int(max(max(defect_img.shape[0],defect_img.shape[1])*0.05,2))), np.uint8)
-        base_bg_mask = cv2.dilate(defect_mask, kernel, iterations=1)
+        if texture_state==False:
+            kernel = np.ones((int(max((max(defect_img.shape[0],defect_img.shape[1])*0.05),2)),int(max(max(defect_img.shape[0],defect_img.shape[1])*0.05,2))), np.uint8)
+            base_bg_mask = cv2.dilate(defect_mask, kernel, iterations=1)
+        else: base_bg_mask = defect_mask
         base_point = (int(center_point[0]-defect_img.shape[1]/2), int(center_point[1]-defect_img.shape[0]/2))
         base_bg = base_img[base_point[1]:base_point[1]+defect_img.shape[0], base_point[0]:base_point[0]+defect_img.shape[1]]
         result = cv2.seamlessClone(base_bg, result, base_bg_mask, center_point, cv2.NORMAL_CLONE)
@@ -601,7 +604,7 @@ def defect3to6(base_img, base_img_name, defect_img, defect_img_data):
 
     return result, result_inf
 
-def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, error_json_path, output_json_path1, output_json_path2, output_folder, ord_json_path, multi_state, process_num):
+def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, error_json_path, output_json_path1, output_json_path2, output_folder, ord_json_path, process_num, multi_state=False, texture_state=False):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -633,7 +636,7 @@ def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, err
     with open(ord_json_path, "r") as ordfile:
         ord_data = json.load(ordfile)
 
-    pbar=tqdm(total=len(base_img_names), desc="defect"+str(defect_imgs_data[0]["category"])+"_CAM"+str(int(base_img_names[0][base_img_names[0].index("_CAM")+4:base_img_names[0].index("_CAM")+5])), position=process_num ,leave=True)
+    pbar=tqdm(total=len(base_img_names), desc="defect"+str(defect_imgs_data[0]["category"])+"_CAM"+str(int(base_img_names[0][base_img_names[0].index("_CAM")+4:base_img_names[0].index("_CAM")+5])) , leave=True)
     
     for defect_img_data, base_img_name in zip(defect_imgs_data,base_img_names):
         defect_img_name = defect_img_data["name"]
@@ -649,13 +652,13 @@ def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, err
                 gen_img, gen_img_inf=defect1(base_img, base_img_name, defect_img, defect_img_data)
                 
             elif defect_img_data["category"] == 2 :
-                gen_img, gen_img_inf=defect2(base_img, base_img_name, defect_img, defect_img_data)
+                gen_img, gen_img_inf=defect2(base_img, base_img_name, defect_img, defect_img_data, texture_state)
                 if(multi_state==True):
                     for num in range(len(gen_img_inf)):
                         gen_img_inf[num]["category"]=base_json_path[base_json_path.index("2_"):base_json_path.index("_CAM")]                       
 
             elif defect_img_data["category"] == 3 or defect_img_data["category"] == 4 or defect_img_data["category"] == 5 or defect_img_data["category"] == 6: 
-                gen_img, gen_img_inf=defect3to6(base_img, base_img_name, defect_img, defect_img_data)
+                gen_img, gen_img_inf=defect3to6(base_img, base_img_name, defect_img, defect_img_data, texture_state)
                 if(multi_state==True):
                     for num in range(len(gen_img_inf)):
                         gen_img_inf[num]["category"]=base_json_path[base_json_path.index("6_"):base_json_path.index("_CAM")]
@@ -690,10 +693,9 @@ def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, err
 
 if __name__ == "__main__":
     defect_list = [11,12,13,21,22,23,31,32,33,41,42,43,51,52,53,61,62,63]
-    gen_img_num = 60
+    gen_img_num = 3
 
-    preprocessing.create_error_json(defect_list)
-    preprocessing.select_json(gen_img_num,defect_list)
+    # preprocessing.select_json(gen_img_num,defect_list)
 
     base_imgs_path = ["rotated" for i in range(len(defect_list))]
     defect_imgs_path = ["rotated" for i in range(len(defect_list))]
@@ -704,7 +706,10 @@ if __name__ == "__main__":
     output_json_path2 = ["output\defect"+str(i//10)+"\gen_defect"+str(i//10)+"_CAM"+str(i%10)+"_with_ord.json" for i in defect_list]
     output_folder = ["output\defect"+str(i//10)+"\CAM"+str(i%10) for i in defect_list]
     ord_json_path = ["train_annos_rotated_fix.json" for i in range(len(defect_list))]
-    multi_state = [False for i in range(len(defect_list))]
+    # multi_state = [False for i in range(len(defect_list))]
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
-        executor.map(main, base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, error_json_path, output_json_path1, output_json_path2, output_folder, ord_json_path, multi_state, range(len(defect_list)))
+        executor.map(main, base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, error_json_path, output_json_path1, output_json_path2, output_folder, ord_json_path, range(len(defect_list)))
+
+    # for i in range(len(defect_list)):
+    #     main(base_imgs_path[i], defect_imgs_path[i], base_json_path[i], defect_json_path[i], error_json_path[i], output_json_path1[i], output_json_path2[i], output_folder[i], ord_json_path[i], i)
