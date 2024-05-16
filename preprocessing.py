@@ -180,70 +180,7 @@ def divide_base(input_json_path, output_json_path1, output_json_path2, output_js
         json.dump(cam3_data, f, indent=4)
 
 
-def create_error_json(defect_list):
-    defect_json = []
-    if 11 in defect_list:
-        defect1_CAM1_json_path = "error/error_defect1_CAM1.json"
-        defect_json.append(defect1_CAM1_json_path)
-    if 12 in defect_list:
-        defect1_CAM2_json_path = "error/error_defect1_CAM2.json"
-        defect_json.append(defect1_CAM2_json_path)
-    if 13 in defect_list:
-        defect1_CAM3_json_path = "error/error_defect1_CAM3.json"
-        defect_json.append(defect1_CAM3_json_path)
-    if 21 in defect_list:
-        defect2_CAM1_json_path = "error/error_defect2_CAM1.json"
-        defect_json.append(defect2_CAM1_json_path)
-    if 22 in defect_list:
-        defect2_CAM2_json_path = "error/error_defect2_CAM2.json"
-        defect_json.append(defect2_CAM2_json_path)
-    if 23 in defect_list:
-        defect2_CAM3_json_path = "error/error_defect2_CAM3.json"
-        defect_json.append(defect2_CAM3_json_path)
-    if 31 in defect_list:
-        defect3_CAM1_json_path = "error/error_defect3_CAM1.json"
-        defect_json.append(defect3_CAM1_json_path)
-    if 32 in defect_list:
-        defect3_CAM2_json_path = "error/error_defect3_CAM2.json"
-        defect_json.append(defect3_CAM2_json_path)
-    if 33 in defect_list:
-        defect3_CAM3_json_path = "error/error_defect3_CAM3.json"
-        defect_json.append(defect3_CAM3_json_path)
-    if 41 in defect_list:
-        defect4_CAM1_json_path = "error/error_defect4_CAM1.json"
-        defect_json.append(defect4_CAM1_json_path)
-    if 42 in defect_list:
-        defect4_CAM2_json_path = "error/error_defect4_CAM2.json"
-        defect_json.append(defect4_CAM2_json_path)
-    if 43 in defect_list:
-        defect4_CAM3_json_path = "error/error_defect4_CAM3.json"
-        defect_json.append(defect4_CAM3_json_path)
-    if 51 in defect_list:
-        defect5_CAM1_json_path = "error/error_defect5_CAM1.json"
-        defect_json.append(defect5_CAM1_json_path)
-    if 52 in defect_list:
-        defect5_CAM2_json_path = "error/error_defect5_CAM2.json"
-        defect_json.append(defect5_CAM2_json_path)
-    if 53 in defect_list:
-        defect5_CAM3_json_path = "error/error_defect5_CAM3.json"
-        defect_json.append(defect5_CAM3_json_path)
-    if 61 in defect_list:
-        defect6_CAM1_json_path = "error/error_defect6_CAM1.json"
-        defect_json.append(defect6_CAM1_json_path)
-    if 62 in defect_list:
-        defect6_CAM2_json_path = "error/error_defect6_CAM2.json"
-        defect_json.append(defect6_CAM2_json_path)
-    if 63 in defect_list:
-        defect6_CAM3_json_path = "error/error_defect6_CAM3.json"
-        defect_json.append(defect6_CAM3_json_path)
-
-    for defejson in defect_json:
-        if not os.path.exists(defejson):
-            with open(defejson, "w") as f:
-                json.dump([], f)
-
-
-def select_random_data(num_samples, file1_path, file2_path, output_file1_path, output_file2_path):
+def select_random_data(num_samples, file1_path, file2_path, output_file1_path, output_file2_path, texture_state=False):
     with open(file1_path, 'r') as f:
         file1_data = json.load(f)
     with open(file2_path, 'r') as f:
@@ -268,12 +205,13 @@ def select_random_data(num_samples, file1_path, file2_path, output_file1_path, o
     # 从文件2中随机挑选数据
     random_file2_data = []
     file2_keys = list(file2_data.keys())
+    file2_keys_copy = file2_keys.copy()
     while len(random_file2_data) < num_samples:
-        random_key = random.choice(file2_keys)
+        if file2_keys_copy == []: file2_keys_copy = file2_keys.copy()
+        random_key = random.choice(file2_keys_copy)
         if random_key not in [sample['name'] for sample in random_file1_data]:
             random_file2_data.append({random_key: file2_data[random_key]})
-            file2_keys.remove(random_key)
-
+            file2_keys_copy.remove(random_key)
 
     if not output_file1_path in os.listdir():
         with open(output_file1_path, 'w') as f:
@@ -288,7 +226,7 @@ def select_random_data(num_samples, file1_path, file2_path, output_file1_path, o
         json.dump(random_file2_data, f, indent=4)
 
 
-def select_json(num, defect_list):
+def select_json(num, defect_list, texture_state=False, base_imgs_json_path=None):
     if 11 in defect_list and 12 in defect_list and 13 in defect_list: sub_num1 = num // 3
     else: sub_num1 = num
     if 21 in defect_list and 22 in defect_list and 23 in defect_list: sub_num2 = num // 3
@@ -302,24 +240,32 @@ def select_json(num, defect_list):
     if 61 in defect_list and 62 in defect_list and 63 in defect_list: sub_num6 = num // 3
     else: sub_num6 = num
 
-    if 11 in defect_list: select_random_data(sub_num1, "defect_json/defect1_CAM1.json", "filtered_defect_img_category_CAM1.json", "choice/defect1_CAM1_img.json", "choice/base_img_for11.json")
-    if 12 in defect_list: select_random_data(sub_num1, "defect_json/defect1_CAM2.json", "filtered_defect_img_category_CAM2.json", "choice/defect1_CAM2_img.json", "choice/base_img_for12.json")
-    if 13 in defect_list: select_random_data(sub_num1, "defect_json/defect1_CAM3.json", "filtered_defect_img_category_CAM3.json", "choice/defect1_CAM3_img.json", "choice/base_img_for13.json")
-    if 21 in defect_list: select_random_data(sub_num2, "defect_json/defect2_CAM1.json", "filtered_defect_img_category_CAM1.json", "choice/defect2_CAM1_img.json", "choice/base_img_for21.json")
-    if 22 in defect_list: select_random_data(sub_num2, "defect_json/defect2_CAM2.json", "filtered_defect_img_category_CAM2.json", "choice/defect2_CAM2_img.json", "choice/base_img_for22.json")
-    if 23 in defect_list: select_random_data(sub_num2, "defect_json/defect2_CAM3.json", "filtered_defect_img_category_CAM3.json", "choice/defect2_CAM3_img.json", "choice/base_img_for23.json")
-    if 31 in defect_list: select_random_data(sub_num3, "defect_json/defect3_CAM1.json", "defect_img_category_CAM1.json", "choice/defect3_CAM1_img.json", "choice/base_img_for31.json")
-    if 32 in defect_list: select_random_data(sub_num3, "defect_json/defect3_CAM2.json", "defect_img_category_CAM2.json", "choice/defect3_CAM2_img.json", "choice/base_img_for32.json")
-    if 33 in defect_list: select_random_data(sub_num3, "defect_json/defect3_CAM3.json", "defect_img_category_CAM3.json", "choice/defect3_CAM3_img.json", "choice/base_img_for33.json")
-    if 41 in defect_list: select_random_data(sub_num4, "defect_json/defect4_CAM1.json", "defect_img_category_CAM1.json", "choice/defect4_CAM1_img.json", "choice/base_img_for41.json")
-    if 42 in defect_list: select_random_data(sub_num4, "defect_json/defect4_CAM2.json", "defect_img_category_CAM2.json", "choice/defect4_CAM2_img.json", "choice/base_img_for42.json")
-    if 43 in defect_list: select_random_data(sub_num4, "defect_json/defect4_CAM3.json", "defect_img_category_CAM3.json", "choice/defect4_CAM3_img.json", "choice/base_img_for43.json")
-    if 51 in defect_list: select_random_data(sub_num5, "defect_json/defect5_CAM1.json", "defect_img_category_CAM1.json", "choice/defect5_CAM1_img.json", "choice/base_img_for51.json")
-    if 52 in defect_list: select_random_data(sub_num5, "defect_json/defect5_CAM2.json", "defect_img_category_CAM2.json", "choice/defect5_CAM2_img.json", "choice/base_img_for52.json")
-    if 53 in defect_list: select_random_data(sub_num5, "defect_json/defect5_CAM3.json", "defect_img_category_CAM3.json", "choice/defect5_CAM3_img.json", "choice/base_img_for53.json")
-    if 61 in defect_list: select_random_data(sub_num6, "defect_json/defect6_CAM1.json", "defect_img_category_CAM1.json", "choice/defect6_CAM1_img.json", "choice/base_img_for61.json")
-    if 62 in defect_list: select_random_data(sub_num6, "defect_json/defect6_CAM2.json", "defect_img_category_CAM2.json", "choice/defect6_CAM2_img.json", "choice/base_img_for62.json")
-    if 63 in defect_list: select_random_data(sub_num6, "defect_json/defect6_CAM3.json", "defect_img_category_CAM3.json", "choice/defect6_CAM3_img.json", "choice/base_img_for63.json")
+    if texture_state==False:
+        if 11 in defect_list: select_random_data(sub_num1, "defect_json/defect1_CAM1.json", "filtered_defect_img_category_CAM1.json", "choice/defect1_CAM1_img.json", "choice/base_img_for11.json")
+        if 12 in defect_list: select_random_data(sub_num1, "defect_json/defect1_CAM2.json", "filtered_defect_img_category_CAM2.json", "choice/defect1_CAM2_img.json", "choice/base_img_for12.json")
+        if 13 in defect_list: select_random_data(sub_num1, "defect_json/defect1_CAM3.json", "filtered_defect_img_category_CAM3.json", "choice/defect1_CAM3_img.json", "choice/base_img_for13.json")
+        if 21 in defect_list: select_random_data(sub_num2, "defect_json/defect2_CAM1.json", "filtered_defect_img_category_CAM1.json", "choice/defect2_CAM1_img.json", "choice/base_img_for21.json")
+        if 22 in defect_list: select_random_data(sub_num2, "defect_json/defect2_CAM2.json", "filtered_defect_img_category_CAM2.json", "choice/defect2_CAM2_img.json", "choice/base_img_for22.json")
+        if 23 in defect_list: select_random_data(sub_num2, "defect_json/defect2_CAM3.json", "filtered_defect_img_category_CAM3.json", "choice/defect2_CAM3_img.json", "choice/base_img_for23.json")
+        if 31 in defect_list: select_random_data(sub_num3, "defect_json/defect3_CAM1.json", "defect_img_category_CAM1.json", "choice/defect3_CAM1_img.json", "choice/base_img_for31.json")
+        if 32 in defect_list: select_random_data(sub_num3, "defect_json/defect3_CAM2.json", "defect_img_category_CAM2.json", "choice/defect3_CAM2_img.json", "choice/base_img_for32.json")
+        if 33 in defect_list: select_random_data(sub_num3, "defect_json/defect3_CAM3.json", "defect_img_category_CAM3.json", "choice/defect3_CAM3_img.json", "choice/base_img_for33.json")
+        if 41 in defect_list: select_random_data(sub_num4, "defect_json/defect4_CAM1.json", "defect_img_category_CAM1.json", "choice/defect4_CAM1_img.json", "choice/base_img_for41.json")
+        if 42 in defect_list: select_random_data(sub_num4, "defect_json/defect4_CAM2.json", "defect_img_category_CAM2.json", "choice/defect4_CAM2_img.json", "choice/base_img_for42.json")
+        if 43 in defect_list: select_random_data(sub_num4, "defect_json/defect4_CAM3.json", "defect_img_category_CAM3.json", "choice/defect4_CAM3_img.json", "choice/base_img_for43.json")
+        if 51 in defect_list: select_random_data(sub_num5, "defect_json/defect5_CAM1.json", "defect_img_category_CAM1.json", "choice/defect5_CAM1_img.json", "choice/base_img_for51.json")
+        if 52 in defect_list: select_random_data(sub_num5, "defect_json/defect5_CAM2.json", "defect_img_category_CAM2.json", "choice/defect5_CAM2_img.json", "choice/base_img_for52.json")
+        if 53 in defect_list: select_random_data(sub_num5, "defect_json/defect5_CAM3.json", "defect_img_category_CAM3.json", "choice/defect5_CAM3_img.json", "choice/base_img_for53.json")
+        if 61 in defect_list: select_random_data(sub_num6, "defect_json/defect6_CAM1.json", "defect_img_category_CAM1.json", "choice/defect6_CAM1_img.json", "choice/base_img_for61.json")
+        if 62 in defect_list: select_random_data(sub_num6, "defect_json/defect6_CAM2.json", "defect_img_category_CAM2.json", "choice/defect6_CAM2_img.json", "choice/base_img_for62.json")
+        if 63 in defect_list: select_random_data(sub_num6, "defect_json/defect6_CAM3.json", "defect_img_category_CAM3.json", "choice/defect6_CAM3_img.json", "choice/base_img_for63.json")
+    elif texture_state==True:
+        if 11 in defect_list: select_random_data(sub_num1, "defect_json/defect1_CAM1.json", base_imgs_json_path, "choice/defect1_CAM1_img.json", "choice/base_img_for11.json", True)
+        if 21 in defect_list: select_random_data(sub_num2, "defect_json/defect2_CAM1.json", base_imgs_json_path, "choice/defect2_CAM1_img.json", "choice/base_img_for21.json", True)
+        if 31 in defect_list: select_random_data(sub_num3, "defect_json/defect3_CAM1.json", base_imgs_json_path, "choice/defect3_CAM1_img.json", "choice/base_img_for31.json", True)
+        if 41 in defect_list: select_random_data(sub_num4, "defect_json/defect4_CAM1.json", base_imgs_json_path, "choice/defect4_CAM1_img.json", "choice/base_img_for41.json", True)
+        if 51 in defect_list: select_random_data(sub_num5, "defect_json/defect5_CAM1.json", base_imgs_json_path, "choice/defect5_CAM1_img.json", "choice/base_img_for51.json", True)
+        if 61 in defect_list: select_random_data(sub_num6, "defect_json/defect6_CAM1.json", base_imgs_json_path, "choice/defect6_CAM1_img.json", "choice/base_img_for61.json", True)
 
 
 if __name__ == "__main__":
@@ -328,5 +274,4 @@ if __name__ == "__main__":
     filter_defect12()
     divide_base("filtered_defect_img_category.json", "filtered_defect_img_category_CAM1.json", "filtered_defect_img_category_CAM2.json", "filtered_defect_img_category_CAM3.json")
     divide_base("defect_img_category.json", "defect_img_category_CAM1.json", "defect_img_category_CAM2.json", "defect_img_category_CAM3.json")
-    create_error_json()
     select_json()

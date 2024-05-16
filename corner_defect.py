@@ -5,6 +5,8 @@ import os
 import math
 import concurrent.futures
 import preprocessing
+import tempfile
+import shutil
 from tqdm import tqdm
 
 
@@ -604,7 +606,47 @@ def defect3to6(base_img, base_img_name, defect_img, defect_img_data, texture_sta
 
     return result, result_inf
 
-def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, error_json_path, output_json_path1, output_json_path2, output_folder, ord_json_path, process_num, multi_state=False, texture_state=False):
+def process_defect(args):
+
+    defect_img_data, base_img_name, base_imgs_path, defect_imgs_path, texture_state, multi_state, base_json_path, temp_dir = args
+    gen_img_inf = None
+    
+    try:
+        base_img = cv2.imread(os.path.join(base_imgs_path, base_img_name))
+        defect_img_name = defect_img_data["name"]
+        defect_img = cv2.imread(os.path.join(defect_imgs_path, defect_img_name))
+        if base_img is None: raise Exception("底图不存在！")
+        if defect_img is None: raise Exception("缺陷图像不存在！")
+
+        if defect_img_data["category"] == 1:
+            gen_img, gen_img_inf = defect1(base_img, base_img_name, defect_img, defect_img_data)
+        elif defect_img_data["category"] == 2:
+            gen_img, gen_img_inf = defect2(base_img, base_img_name, defect_img, defect_img_data, texture_state)
+            if multi_state:
+                for num in range(len(gen_img_inf)):
+                    gen_img_inf[num]["category"] = base_json_path[base_json_path.index("2_"):base_json_path.index("_CAM")]
+        elif defect_img_data["category"] in [3, 4, 5, 6]:
+            gen_img, gen_img_inf = defect3to6(base_img, base_img_name, defect_img, defect_img_data, texture_state)
+            if multi_state:
+                for num in range(len(gen_img_inf)):
+                    gen_img_inf[num]["category"] = base_json_path[base_json_path.index("6_"):base_json_path.index("_CAM")]
+
+        if gen_img is not None:
+            temp_img_path = os.path.join(temp_dir, gen_img_inf["name"] + ".jpg")
+            cv2.imwrite(temp_img_path, gen_img)
+
+        return gen_img_inf, temp_img_path, base_img_name
+    
+    except Exception as e:
+        error_data = {
+            "error": str(e),
+            "base_img_name": base_img_name,
+            "defect_img_data": defect_img_data
+        }
+        return error_data, None, None
+
+
+def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, error_json_path, output_json_path1, output_json_path2, output_folder, ord_json_path, multi_state=False, texture_state=False):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
@@ -627,89 +669,73 @@ def main(base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, err
     with open(defect_json_path, 'r') as defect_f:
         defect_imgs_data = json.load(defect_f)
 
-    with open(output_json_path1, "r") as rnfile1:
-        gen_img_data = json.load(rnfile1)
-
-    with open(output_json_path2, "r") as rnfile2:
-        gen_img_data_with_ord = json.load(rnfile2)
-
     with open(ord_json_path, "r") as ordfile:
         ord_data = json.load(ordfile)
 
-    pbar=tqdm(total=len(base_img_names), desc="defect"+str(defect_imgs_data[0]["category"])+"_CAM"+str(int(base_img_names[0][base_img_names[0].index("_CAM")+4:base_img_names[0].index("_CAM")+5])) , leave=True)
-    
-    for defect_img_data, base_img_name in zip(defect_imgs_data,base_img_names):
-        defect_img_name = defect_img_data["name"]
-        gen_img = None
+    with tempfile.TemporaryDirectory() as temp_dir:
+        args = [(defect_img_data, base_img_name, base_imgs_path, defect_imgs_path, texture_state, multi_state, base_json_path, temp_dir) for defect_img_data, base_img_name in zip(defect_imgs_data, base_img_names)]
 
-        try:
-            base_img = cv2.imread(os.path.join(base_imgs_path, base_img_name))
-            defect_img = cv2.imread(os.path.join(defect_imgs_path, defect_img_name))
-            if base_img is None: assert False, "底图不存在！"
-            if defect_img is None: assert False, "缺陷图像不存在！"
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            results = executor.map(process_defect, args, timeout=60)
 
-            if defect_img_data["category"] == 1 :
-                gen_img, gen_img_inf=defect1(base_img, base_img_name, defect_img, defect_img_data)
-                
-            elif defect_img_data["category"] == 2 :
-                gen_img, gen_img_inf=defect2(base_img, base_img_name, defect_img, defect_img_data, texture_state)
-                if(multi_state==True):
-                    for num in range(len(gen_img_inf)):
-                        gen_img_inf[num]["category"]=base_json_path[base_json_path.index("2_"):base_json_path.index("_CAM")]                       
+        gen_img_data = []
+        gen_img_data_with_ord = []
+        error_data_list = []
+        for result in results:
+            if isinstance(result[0], dict) and "error" in result[0]:  # 检查是否包含错误
+                error_data_list.append(result[0])
+            else:
+                gen_img_inf, temp_img_path, base_img_name = result
+                if gen_img_inf is not None and temp_img_path is not None:
+                    final_img_path = os.path.join(output_folder, gen_img_inf["name"][:gen_img_inf["name"].index(".jpg")] + ".jpg")
+                    shutil.move(temp_img_path, final_img_path)
+                    gen_img_data.append(gen_img_inf)
+                    gen_img_data_with_ord.append(gen_img_inf)
+                    img_datai = ord_data.copy()
+                    for item in img_datai:
+                        if item["name"] == base_img_name:
+                            item["name"] = gen_img_inf["name"]
+                            gen_img_data_with_ord.append(item)
 
-            elif defect_img_data["category"] == 3 or defect_img_data["category"] == 4 or defect_img_data["category"] == 5 or defect_img_data["category"] == 6: 
-                gen_img, gen_img_inf=defect3to6(base_img, base_img_name, defect_img, defect_img_data, texture_state)
-                if(multi_state==True):
-                    for num in range(len(gen_img_inf)):
-                        gen_img_inf[num]["category"]=base_json_path[base_json_path.index("6_"):base_json_path.index("_CAM")]
-                # sub_gen_img = gen_img[int(gen_img_inf["bbox"][1]-50):int(gen_img_inf["bbox"][3]+50), int(gen_img_inf["bbox"][0]-50):int(gen_img_inf["bbox"][2]+50)]
-                # sub_img = defect_img[int(gen_img_inf["defect_bbox"][1]-50):int(gen_img_inf["defect_bbox"][3]+50), int(gen_img_inf["defect_bbox"][0]-50):int(gen_img_inf["defect_bbox"][2]+50)]
+        with open(output_json_path1, "w") as json_file1:
+            json.dump(gen_img_data, json_file1, indent=4)
+        with open(output_json_path2, "w") as json_file2:
+            json.dump(gen_img_data_with_ord, json_file2, indent=4)
 
-            if gen_img is not None:
-                cv2.imwrite(os.path.join(output_folder, gen_img_inf["name"]), gen_img)
-                gen_img_data.append(gen_img_inf)
-                gen_img_data_with_ord.append(gen_img_inf)
-                img_datai = ord_data.copy()
-                for item in img_datai:
-                    if item["name"] == base_img_name:
-                        item["name"] = gen_img_inf["name"]
-                        gen_img_data_with_ord.append(item)
-                with open(output_json_path1, "w") as json_file1:
-                    json.dump(gen_img_data, json_file1, indent=4)
-                with open(output_json_path2, "w") as json_file2:
-                    json.dump(gen_img_data_with_ord, json_file2, indent=4)
-                pbar.update(1)
+        if error_data_list:
+            with open(error_json_path, "w") as error_file:
+                json.dump(error_data_list, error_file, indent=4)
 
-        except:
-            with open(error_json_path, "r") as r_error_file:
-                error_data_list = json.load(r_error_file)
-            error_data_list.append(defect_img_data)
-            error_data_list.append(base_img_name)
-            with open(error_json_path, "w") as w_error_file:
-                json.dump(error_data_list, w_error_file, indent=4)
-            pbar.update(1)
-            continue
-    pbar.close()
 
 if __name__ == "__main__":
     defect_list = [11,12,13,21,22,23,31,32,33,41,42,43,51,52,53,61,62,63]
-    gen_img_num = 3
+    gen_img_num = 100
+    texture_state = False
+    base_imgs_path = "rotated"
+    defect_imgs_path = "rotated"
+    # texture_state = True
+    # defect_list = [11,21,31,41,51,61]
+    # base_imgs_path = "texture_base"
 
-    # preprocessing.select_json(gen_img_num,defect_list)
-
-    base_imgs_path = ["rotated" for i in range(len(defect_list))]
-    defect_imgs_path = ["rotated" for i in range(len(defect_list))]
+    if texture_state==True: 
+        base_imgs_name = os.listdir(base_imgs_path)
+        base_imgs_json_path = r"choice\base_imgs.json"
+        with open(base_imgs_json_path, "w") as base_json_file:
+            base_json = {key: [1] for key in base_imgs_name}
+            json.dump(base_json, base_json_file, indent=4)
     base_json_path = [r"choice\base_img_for"+str(i)+".json" for i in defect_list]
     defect_json_path = ["choice\defect"+str(i//10)+"_CAM"+str(i%10)+"_img.json" for i in defect_list]
     error_json_path = ["error\error_defect"+str(i//10)+"_CAM"+str(i%10)+".json" for i in defect_list]
     output_json_path1 = ["output\defect"+str(i//10)+"\gen_defect"+str(i//10)+"_CAM"+str(i%10)+".json" for i in defect_list]
     output_json_path2 = ["output\defect"+str(i//10)+"\gen_defect"+str(i//10)+"_CAM"+str(i%10)+"_with_ord.json" for i in defect_list]
     output_folder = ["output\defect"+str(i//10)+"\CAM"+str(i%10) for i in defect_list]
-    ord_json_path = ["train_annos_rotated_fix.json" for i in range(len(defect_list))]
+    ord_json_path = "train_annos_rotated_fix.json"
     # multi_state = [False for i in range(len(defect_list))]
 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        executor.map(main, base_imgs_path, defect_imgs_path, base_json_path, defect_json_path, error_json_path, output_json_path1, output_json_path2, output_folder, ord_json_path, range(len(defect_list)))
+    if texture_state==False: preprocessing.select_json(gen_img_num, defect_list)
+    elif texture_state==True: preprocessing.select_json(gen_img_num, defect_list, texture_state, base_imgs_json_path)
 
-    # for i in range(len(defect_list)):
-    #     main(base_imgs_path[i], defect_imgs_path[i], base_json_path[i], defect_json_path[i], error_json_path[i], output_json_path1[i], output_json_path2[i], output_folder[i], ord_json_path[i], i)
+    for i in tqdm(range(len(defect_list))):
+        main(base_imgs_path, defect_imgs_path, base_json_path[i], defect_json_path[i], error_json_path[i], output_json_path1[i], output_json_path2[i], output_folder[i], ord_json_path, texture_state=texture_state)
+
+    # main("base.jpg","defect.jpg","base.json","defect.json","error.json","output.json","output_with_ord.json","output","train_annos_rotated_fix.json")
