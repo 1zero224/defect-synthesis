@@ -1,8 +1,11 @@
 # Defect Synthesis
 
 `rotated_train_imgs.py`: Dataset image rotation
+
 `defect_synthesis.py`: Defect Synthesis
+
 `preprocessing.py`: Dataset preprocessing
+
 `train_annous_rotated.json`: rotated dataset, can also be replaced with original dataset
 
 
@@ -10,6 +13,7 @@
 ## Installations:
 
 Install dependencies using requirements.txt
+
 `pip install -r requirements.txt`
 
 
