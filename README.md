@@ -1,4 +1,4 @@
-#Defect Synthesis
+# Defect Synthesis
 
 `rotated_train_imgs.py`: Dataset image rotation
 `defect_synthesis.py`: Defect Synthesis
