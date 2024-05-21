@@ -1,17 +1,19 @@
-`rotated_train_imgs.py`: 数据集图像旋转
+#Defect Synthesis
 
-`corner_defect.py`: 缺陷融合
+`rotated_train_imgs.py`: Dataset image rotation
+`defect_synthesis.py`: Defect Synthesis
+`preprocessing.py`: Dataset preprocessing
+`train_annous_rotated.json`: rotated dataset, can also be replaced with original dataset
 
 
 
-# how to run
+## Installations:
 
-**准备工作：**
-`/base_img`: 底图
+Install dependencies using requirements.txt
+`pip install -r requirements.txt`
 
-`/defect_img`: 带缺陷图
 
-`train_annous_rotated.json`: 旋转后数据集，也可替换成原数据集（defect_img中的数据集也要一起替换）
 
-`pip install -r requirements.txt`: 安装依赖库
+## Usage: 
 
+Run `preprocessing.py` in the terminal, fill in the paths of Base Image, Defect Image, Output File and Original Dataset json, and then run `defect_synthesis.py` in the terminal.
